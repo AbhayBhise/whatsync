@@ -1,0 +1,10 @@
+-- AlterTable
+ALTER TABLE "Consent" ALTER COLUMN "teamId" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "Mapping" ALTER COLUMN "teamId" DROP DEFAULT;
+
+-- AlterTable
+ALTER TABLE "PendingConnection" ALTER COLUMN "expiresAt" DROP DEFAULT,
+ALTER COLUMN "teamId" DROP DEFAULT,
+ALTER COLUMN "token" DROP DEFAULT;

@@ -11,11 +11,15 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@prisma/client": "^5.22.0",
     "@slack/bolt": "^4.6.0",
     "axios": "^1.13.6",
     "body-parser": "^2.2.2",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "n8n-nodes-tinyfish": "^0.1.7"
+    "form-data": "^4.0.5",
+    "n8n-nodes-tinyfish": "^0.1.7",
+    "prisma": "^5.22.0",
+    "qrcode": "^1.5.4"
   }
 }

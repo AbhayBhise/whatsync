@@ -1,0 +1,52 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Stores which WhatsApp number ↔ which Slack thread
+model Mapping {
+  id          String @id @default(cuid())
+  phoneNumber String
+  threadTs    String
+  teamId      String           // NEW: workspace isolation
+  @@unique([phoneNumber, teamId])
+}
+
+// Deduplication — never process same WhatsApp message twice
+model ProcessedMessage {
+  messageId String @id
+  createdAt DateTime @default(now())
+}
+
+// Onboarding intent — Slack user initiated contact with this number
+model PendingConnection {
+  id          String   @id @default(cuid())
+  phoneNumber String
+  token       String   @unique   // NEW: secure token
+  teamId      String             // NEW: which workspace initiated
+  expiresAt   DateTime           // NEW: 5 min TTL
+  createdAt   DateTime @default(now())
+}
+
+// Authorization — only talk to consented numbers
+model Consent {
+  phoneNumber String  @id
+  consentGiven Boolean
+  teamId      String           // NEW: workspace scoped
+  createdAt   DateTime @default(now())
+}
+
+// NEW: Slack workspace installs (OAuth)
+model WorkspaceInstall {
+  teamId      String   @id
+  botToken    String
+  channelId   String?
+  teamName    String?
+  installedAt DateTime @default(now())
+}
