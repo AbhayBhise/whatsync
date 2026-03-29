@@ -197,6 +197,30 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             });
         }
 
+        // Notify WhatsApp user before deleting data
+        try {
+            await axios.post(
+                `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
+                {
+                    messaging_product: "whatsapp",
+                    to: number,
+                    type: "text",
+                    text: {
+                        body: `⚠️ You have been removed from the Slack bridge by a team member.\n\nYou will no longer receive or be able to send messages through this channel.\n\nIf you'd like to reconnect, ask the team to invite you again.`
+                    }
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+        } catch (err) {
+            console.error("❌ Remove notification to WA failed:", err.message);
+        }
+
+        // GDPR: delete all data
         await prisma.consent.delete({ where: { phoneNumber: hashPhone(number) } });
         await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(number) } });
         await prisma.pendingConnection.deleteMany({ where: { phoneNumber: hashPhone(number) } });
