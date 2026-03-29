@@ -119,8 +119,19 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         const qrBuffer = await QRCode.toBuffer(waLink, { width: 300, margin: 2 });
 
         // Upload QR to Slack
+        // Upload QR to Slack using workspace token
         const { WebClient } = require("@slack/web-api");
-        const slackClient = new WebClient(process.env.SLACK_BOT_TOKEN);
+        const wsInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+        const wsToken = wsInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+        const slackClient = new WebClient(wsToken);
+
+        // Save channel if not set yet
+        if (wsInstall && !wsInstall.channelId) {
+            await prisma.workspaceInstall.update({
+                where: { teamId },
+                data: { channelId: command.channel_id }
+            });
+        }
 
         await slackClient.files.uploadV2({
             channel_id: command.channel_id,
@@ -259,37 +270,69 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
     }
 
     // ===============================
-// AUDIT: /whatsapp1 audit <number>
-// ===============================
-if (subcommand === "audit") {
-    const number = parts[1];
+    // SETCHANNEL: /whatsapp1 setchannel
+    // ===============================
+    if (subcommand === "setchannel") {
+        const teamId = command.team_id;
+        const channelId = command.channel_id;
+        const botToken = command.token;
 
-    if (!number || !/^\d{10,15}$/.test(number)) {
-        return respond("Usage: /whatsapp1 audit 91XXXXXXXXXX");
+        try {
+            await prisma.workspaceInstall.upsert({
+                where: { teamId },
+                update: { channelId },
+                create: {
+                    teamId,
+                    botToken: process.env.SLACK_BOT_TOKEN,
+                    channelId
+                }
+            });
+
+            return respond({
+                response_type: "ephemeral",
+                text: `✅ This channel has been set as the default bridge channel for your workspace.\n\nAll WhatsApp messages will now appear here.`
+            });
+        } catch (err) {
+            console.error("❌ setchannel error:", err.message);
+            return respond({
+                response_type: "ephemeral",
+                text: `❌ Failed to set channel: ${err.message}`
+            });
+        }
     }
 
-    const logs = await prisma.auditLog.findMany({
-        where: { phoneHash: hashPhone(number) },
-        orderBy: { createdAt: "asc" }
-    });
+    // ===============================
+    // AUDIT: /whatsapp1 audit <number>
+    // ===============================
+    if (subcommand === "audit") {
+        const number = parts[1];
 
-    if (logs.length === 0) {
+        if (!number || !/^\d{10,15}$/.test(number)) {
+            return respond("Usage: /whatsapp1 audit 91XXXXXXXXXX");
+        }
+
+        const logs = await prisma.auditLog.findMany({
+            where: { phoneHash: hashPhone(number) },
+            orderBy: { createdAt: "asc" }
+        });
+
+        if (logs.length === 0) {
+            return respond({
+                response_type: "ephemeral",
+                text: `📋 No audit history found for ${number}.`
+            });
+        }
+
+        const lines = logs.map(l => {
+            const time = new Date(l.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+            return `• \`${l.action}\` — by *${l.initiatedBy}* at ${time}`;
+        });
+
         return respond({
             response_type: "ephemeral",
-            text: `📋 No audit history found for ${number}.`
+            text: `📋 *Audit log for ${number} (${logs.length} events):*\n${lines.join("\n")}`
         });
     }
-
-    const lines = logs.map(l => {
-        const time = new Date(l.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-        return `• \`${l.action}\` — by *${l.initiatedBy}* at ${time}`;
-    });
-
-    return respond({
-        response_type: "ephemeral",
-        text: `📋 *Audit log for ${number} (${logs.length} events):*\n${lines.join("\n")}`
-    });
-}
 
     // ===============================
     // PING: /whatsapp1 ping <number>
@@ -333,7 +376,7 @@ if (subcommand === "audit") {
                 }
             );
 
-await auditLog(hashPhone(number), "PINGED", `slack_user:${command.user_id}`, command.team_id);
+            await auditLog(hashPhone(number), "PINGED", `slack_user:${command.user_id}`, command.team_id);
 
             return respond({
                 response_type: "ephemeral",
@@ -391,14 +434,15 @@ await auditLog(hashPhone(number), "PINGED", `slack_user:${command.user_id}`, com
     // FALLBACK
     // ===============================
     return respond(
-    "Unknown command. Available commands:\n" +
-    "• `/whatsapp1 <number>` — onboard a new WhatsApp user\n" +
-    "• `/whatsapp1 list` — show all connected users\n" +
-    "• `/whatsapp1 remove <number>` — disconnect a user\n" +
-    "• `/whatsapp1 reply <message>` — reply from a thread\n" +
-    "• `/whatsapp1 ping <number>` — nudge a WhatsApp user to start conversation\n" +
-    "• `/whatsapp1 audit <number>` — view full audit history for a number"
-);
+        "Unknown command. Available commands:\n" +
+        "• `/whatsapp1 <number>` — onboard a new WhatsApp user\n" +
+        "• `/whatsapp1 list` — show all connected users\n" +
+        "• `/whatsapp1 remove <number>` — disconnect a user\n" +
+        "• `/whatsapp1 reply <message>` — reply from a thread\n" +
+        "• `/whatsapp1 ping <number>` — nudge a WhatsApp user to start conversation\n" +
+        "• `/whatsapp1 audit <number>` — view full audit history for a number\n" +
+        "• `/whatsapp1 setchannel` — set this channel as the bridge channel for your workspace"
+    );
 });
 
 // ===============================
@@ -745,9 +789,20 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 
             await prisma.workspaceInstall.upsert({
                 where: { teamId: data.team.id },
-                update: { botToken: data.access_token, teamName: data.team.name },
-                create: { teamId: data.team.id, botToken: data.access_token, teamName: data.team.name }
+                update: {
+                    botToken: data.access_token,
+                    teamName: data.team.name
+                },
+                create: {
+                    teamId: data.team.id,
+                    botToken: data.access_token,
+                    teamName: data.team.name,
+                    channelId: null
+                }
             });
+
+            console.log("✅ OAuth install complete for:", data.team.name);
+            // Send instructions to install channel
 
             console.log("✅ OAuth install complete for:", data.team.name);
             res.send(`
