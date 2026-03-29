@@ -243,6 +243,70 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             text: `✅ ${number} has been disconnected and all data deleted.`
         });
     }
+
+    // ===============================
+    // PING: /whatsapp1 ping <number>
+    // ===============================
+    if (subcommand === "ping") {
+        const number = parts[1];
+
+        if (!number || !/^\d{10,15}$/.test(number)) {
+            return respond("Usage: /whatsapp1 ping 91XXXXXXXXXX");
+        }
+
+        // Check consent exists
+        const consent = await prisma.consent.findUnique({
+            where: { phoneNumber: hashPhone(number) }
+        });
+
+        if (!consent) {
+            return respond({
+                response_type: "ephemeral",
+                text: `⚠️ ${number} is not connected. Use /whatsapp1 ${number} to onboard them first.`
+            });
+        }
+
+        // Send ping message to WhatsApp
+        try {
+            await axios.post(
+                `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
+                {
+                    messaging_product: "whatsapp",
+                    to: number,
+                    type: "text",
+                    text: {
+                        body: `👋 The team on Slack wants to chat with you!\n\nPlease reply to this message to start the conversation. The session lasts 24 hours from your last message.`
+                    }
+                },
+                {
+                    headers: {
+                        Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            return respond({
+                response_type: "ephemeral",
+                text: `✅ Ping sent to ${number}. They'll be notified to start the conversation.`
+            });
+        } catch (err) {
+            const code = err.response?.data?.error?.code;
+            let errMsg = `❌ Could not ping ${number}.`;
+            if (code === 131030) {
+                errMsg += ` Number not in Meta sandbox allowlist.`;
+            } else if (code === 131047) {
+                errMsg += ` WhatsApp 24-hour session expired — user must message first.`;
+            } else {
+                errMsg += ` Error: ${err.response?.data?.error?.message || err.message}`;
+            }
+            return respond({
+                response_type: "ephemeral",
+                text: errMsg
+            });
+        }
+    }
+
     // ===============================
     // REPLY: /whatsapp1 reply <message>
     // ===============================
@@ -282,7 +346,8 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         "• `/whatsapp1 <number>` — onboard a new WhatsApp user\n" +
         "• `/whatsapp1 list` — show all connected users\n" +
         "• `/whatsapp1 remove <number>` — disconnect a user\n" +
-        "• `/whatsapp1 reply <message>` — reply from a thread"
+        "• `/whatsapp1 reply <message>` — reply from a thread\n" +
+        "• `/whatsapp1 ping <number>` — nudge a WhatsApp user to start conversation"
     );
 });
 
