@@ -101,6 +101,17 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         const number = subcommand;
         const teamId = command.team_id;
 
+        // Check if number already connected
+        const existingConsent = await prisma.consent.findUnique({
+            where: { phoneNumber: hashPhone(number) }
+        });
+
+        if (existingConsent && existingConsent.consentGiven) {
+            return respond({
+                response_type: "ephemeral",
+                text: `⚠️ *${number} is already connected.*\nThey are an active bridge user. Use \`/whatsapp1 ping ${number}\` to reach them or \`/whatsapp1 remove ${number}\` to disconnect them first.`
+            });
+        }
         const token = crypto.randomBytes(16).toString("hex");
         const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
