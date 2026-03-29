@@ -862,6 +862,22 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                 await prisma.pendingConnection.delete({ where: { token: receivedToken } });
                 console.log("✅ Consent granted and token cleaned up for:", from);
 
+                // Notify Slack that user has joined
+                try {
+                    const joinTeamId = pending.teamId;
+                    const joinWorkspace = await prisma.workspaceInstall.findUnique({ where: { teamId: joinTeamId } });
+                    const joinBotToken = joinWorkspace?.botToken || process.env.SLACK_BOT_TOKEN;
+                    const joinChannel = joinWorkspace?.channelId || process.env.SLACK_CHANNEL_ID;
+                    const { WebClient: JoinClient } = require("@slack/web-api");
+                    const joinSlack = new JoinClient(joinBotToken);
+                    await joinSlack.chat.postMessage({
+                        channel: joinChannel,
+                        text: `✅ *${from} has joined the bridge!*\nThey confirmed via WhatsApp. You can now message them by replying in their thread.`
+                    });
+                } catch (err) {
+                    console.error("❌ Join notification failed:", err.message);
+                }
+
                 // Send welcome message explaining the session rules
                 try {
                     await axios.post(
