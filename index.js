@@ -21,6 +21,18 @@ const QRCode = require("qrcode");
 function hashPhone(phoneNumber) {
     return crypto.createHash("sha256").update(phoneNumber.toString().trim()).digest("hex");
 }
+// ===============================
+// 🔹 AUDIT LOGGING (GDPR)
+// ===============================
+async function auditLog(phoneHash, action, initiatedBy, teamId) {
+    try {
+        await prisma.auditLog.create({
+            data: { phoneHash, action, initiatedBy, teamId }
+        });
+    } catch (err) {
+        console.error("❌ Audit log failed:", err.message);
+    }
+}
 
 // Auto-clean expired PendingConnections every 30 seconds
 setInterval(async () => {
@@ -220,6 +232,8 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             console.error("❌ Remove notification to WA failed:", err.message);
         }
 
+        await auditLog(hashPhone(number), "REMOVED_BY_SLACK", `slack_user:${command.user_id}`, teamId);
+
         // GDPR: delete all data
         await prisma.consent.delete({ where: { phoneNumber: hashPhone(number) } });
         await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(number) } });
@@ -243,6 +257,39 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             text: `✅ ${number} has been disconnected and all data deleted.`
         });
     }
+
+    // ===============================
+// AUDIT: /whatsapp1 audit <number>
+// ===============================
+if (subcommand === "audit") {
+    const number = parts[1];
+
+    if (!number || !/^\d{10,15}$/.test(number)) {
+        return respond("Usage: /whatsapp1 audit 91XXXXXXXXXX");
+    }
+
+    const logs = await prisma.auditLog.findMany({
+        where: { phoneHash: hashPhone(number) },
+        orderBy: { createdAt: "asc" }
+    });
+
+    if (logs.length === 0) {
+        return respond({
+            response_type: "ephemeral",
+            text: `📋 No audit history found for ${number}.`
+        });
+    }
+
+    const lines = logs.map(l => {
+        const time = new Date(l.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+        return `• \`${l.action}\` — by *${l.initiatedBy}* at ${time}`;
+    });
+
+    return respond({
+        response_type: "ephemeral",
+        text: `📋 *Audit log for ${number} (${logs.length} events):*\n${lines.join("\n")}`
+    });
+}
 
     // ===============================
     // PING: /whatsapp1 ping <number>
@@ -285,6 +332,8 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
                     }
                 }
             );
+
+await auditLog(hashPhone(number), "PINGED", `slack_user:${command.user_id}`, command.team_id);
 
             return respond({
                 response_type: "ephemeral",
@@ -342,13 +391,14 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
     // FALLBACK
     // ===============================
     return respond(
-        "Unknown command. Available commands:\n" +
-        "• `/whatsapp1 <number>` — onboard a new WhatsApp user\n" +
-        "• `/whatsapp1 list` — show all connected users\n" +
-        "• `/whatsapp1 remove <number>` — disconnect a user\n" +
-        "• `/whatsapp1 reply <message>` — reply from a thread\n" +
-        "• `/whatsapp1 ping <number>` — nudge a WhatsApp user to start conversation"
-    );
+    "Unknown command. Available commands:\n" +
+    "• `/whatsapp1 <number>` — onboard a new WhatsApp user\n" +
+    "• `/whatsapp1 list` — show all connected users\n" +
+    "• `/whatsapp1 remove <number>` — disconnect a user\n" +
+    "• `/whatsapp1 reply <message>` — reply from a thread\n" +
+    "• `/whatsapp1 ping <number>` — nudge a WhatsApp user to start conversation\n" +
+    "• `/whatsapp1 audit <number>` — view full audit history for a number"
+);
 });
 
 // ===============================
@@ -905,6 +955,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                     });
 
                     console.log("🔴 Opt-out received from:", from);
+                    await auditLog(hashPhone(from), "UNSUBSCRIBED", "whatsapp_user", existingConsent.teamId || "default_workspace");
                 } else {
                     console.log("⚠️ STOP from unknown number:", from);
                 }
@@ -954,7 +1005,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 
                 await prisma.pendingConnection.delete({ where: { token: receivedToken } });
                 console.log("✅ Consent granted and token cleaned up for:", from);
-
+                await auditLog(hashPhone(from), "JOINED", "whatsapp_user", pending.teamId);
                 // Notify Slack that user has joined
                 try {
                     const joinTeamId = pending.teamId;

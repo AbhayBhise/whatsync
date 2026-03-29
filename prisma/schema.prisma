@@ -51,3 +51,12 @@ model WorkspaceInstall {
   teamName    String?
   installedAt DateTime @default(now())
 }
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  phoneHash   String
+  action      String   // JOINED, REMOVED_BY_SLACK, UNSUBSCRIBED, PINGED
+  initiatedBy String   // "whatsapp_user", "slack_user", "system"
+  teamId      String
+  createdAt   DateTime @default(now())
+}
