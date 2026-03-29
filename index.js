@@ -115,6 +115,36 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         });
         return;
     }
+    // ===============================
+    // LIST: /whatsapp1 list
+    // ===============================
+    if (subcommand === "list") {
+        const teamId = command.team_id;
+
+        const consented = await prisma.consent.findMany({
+            where: { teamId, consentGiven: true }
+        });
+
+        if (consented.length === 0) {
+            return respond({
+                response_type: "ephemeral",
+                text: "📋 No WhatsApp users currently connected."
+            });
+        }
+
+        const lines = await Promise.all(consented.map(async (c) => {
+            const mapping = await prisma.mapping.findFirst({
+                where: { phoneNumber: c.phoneNumber, teamId }
+            });
+            const since = c.createdAt.toDateString();
+            return `• *${c.phoneNumber}* — connected since ${since}${mapping ? ` — thread: ${mapping.threadTs}` : ""}`;
+        }));
+
+        return respond({
+            response_type: "ephemeral",
+            text: `📋 *Connected WhatsApp users (${consented.length}):*\n${lines.join("\n")}`
+        });
+    }
 
     // ===============================
     // INVITE: /whatsapp1 invite <number>
@@ -136,7 +166,53 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         });
         return;
     }
+    // ===============================
+    // REMOVE: /whatsapp1 remove <number>
+    // ===============================
+    if (subcommand === "remove") {
+        const number = parts[1];
 
+        if (!number || !/^\d{10,15}$/.test(number)) {
+            return respond("Usage: /whatsapp1 remove 91XXXXXXXXXX");
+        }
+
+        const teamId = command.team_id;
+
+        const consent = await prisma.consent.findUnique({
+            where: { phoneNumber: number }
+        });
+
+        if (!consent) {
+            return respond({
+                response_type: "ephemeral",
+                text: `⚠️ ${number} is not connected.`
+            });
+        }
+
+        // GDPR: delete all data
+        await prisma.consent.delete({ where: { phoneNumber: number } });
+        await prisma.mapping.deleteMany({ where: { phoneNumber: number } });
+        await prisma.pendingConnection.deleteMany({ where: { phoneNumber: number } });
+
+        // Notify in channel
+        const workspaceInstall = await prisma.workspaceInstall.findUnique({
+            where: { teamId }
+        });
+        const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+        const SLACK_CHANNEL = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+        const { WebClient } = require("@slack/web-api");
+        const slackClient = new WebClient(botToken);
+
+        await slackClient.chat.postMessage({
+            channel: SLACK_CHANNEL,
+            text: `🔴 *${number} has been removed* from the bridge by a Slack user. All their data has been deleted.`
+        });
+
+        return respond({
+            response_type: "ephemeral",
+            text: `✅ ${number} has been disconnected and all data deleted.`
+        });
+    }
     // ===============================
     // REPLY: /whatsapp1 reply <message>
     // ===============================
@@ -172,7 +248,11 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
     // FALLBACK
     // ===============================
     return respond(
-        "Unknown command.\nUse:\n/whatsapp1 <number>\n/whatsapp1 invite <number>\n/whatsapp1 reply <message>"
+        "Unknown command. Available commands:\n" +
+        "• `/whatsapp1 <number>` — onboard a new WhatsApp user\n" +
+        "• `/whatsapp1 list` — show all connected users\n" +
+        "• `/whatsapp1 remove <number>` — disconnect a user\n" +
+        "• `/whatsapp1 reply <message>` — reply from a thread"
     );
 });
 
@@ -705,10 +785,10 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 
                 if (existingConsent) {
                     // Revoke consent
-                    await prisma.consent.update({
-                        where: { phoneNumber: from },
-                        data: { consentGiven: false }
-                    });
+                    // GDPR: delete all data for this number
+                    await prisma.consent.delete({ where: { phoneNumber: from } });
+                    await prisma.mapping.deleteMany({ where: { phoneNumber: from } });
+                    await prisma.pendingConnection.deleteMany({ where: { phoneNumber: from } });
 
                     // Notify Slack thread
                     const teamId = existingConsent.teamId || "default_workspace";
