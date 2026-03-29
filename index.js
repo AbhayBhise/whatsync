@@ -778,7 +778,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             // ===============================
             // 🔹 STOP / OPT-OUT DETECTION
             // ===============================
-            const stopWords = ["STOP", "UNSUBSCRIBE"];
+            const stopWords = ["STOP", "UNSUBSCRIBE", "STOPSLACK"];
             if (stopWords.includes(text.trim().toUpperCase())) {
                 const existingConsent = await prisma.consent.findUnique({
                     where: { phoneNumber: from }
