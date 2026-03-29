@@ -1,3 +1,4 @@
+require("./instrument.js");
 const dns = require("dns");
 const crypto = require("crypto");
 dns.setDefaultResultOrder("ipv4first");
