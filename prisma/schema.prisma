@@ -13,8 +13,9 @@ datasource db {
 model Mapping {
   id          String @id @default(cuid())
   phoneNumber String
+  sendTo      String
   threadTs    String
-  teamId      String           // NEW: workspace isolation
+  teamId      String
   @@unique([phoneNumber, teamId])
 }
 

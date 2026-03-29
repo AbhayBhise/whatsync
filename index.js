@@ -6,7 +6,6 @@ dns.setDefaultResultOrder("ipv4first");
 require("https").globalAgent.options.family = 4;
 
 const express = require("express");
-// const app = express();
 const axios = require("axios");
 require("dotenv").config();
 
@@ -15,7 +14,15 @@ const { App, ExpressReceiver } = require("@slack/bolt");
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const QRCode = require("qrcode");
-// Auto-clean expired PendingConnections every 2 minutes
+
+// ===============================
+// 🔹 PHONE HASHING (GDPR)
+// ===============================
+function hashPhone(phoneNumber) {
+    return crypto.createHash("sha256").update(phoneNumber.toString().trim()).digest("hex");
+}
+
+// Auto-clean expired PendingConnections every 30 seconds
 setInterval(async () => {
     try {
         await prisma.$queryRaw`SELECT 1`;
@@ -87,7 +94,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
 
         try {
             await prisma.pendingConnection.create({
-                data: { phoneNumber: number, token, teamId, expiresAt }
+                data: { phoneNumber: hashPhone(number), token, teamId, expiresAt }
             });
         } catch (err) {
             console.log("⚠️ DB insert failed:", err.message);
@@ -138,7 +145,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
                 where: { phoneNumber: c.phoneNumber, teamId }
             });
             const since = c.createdAt.toDateString();
-            return `• *${c.phoneNumber}* — connected since ${since}${mapping ? ` — thread: ${mapping.threadTs}` : ""}`;
+            return `• *${c.phoneNumber.substring(0, 8)}...* (hashed) — connected since ${since}${mapping ? ` — thread: ${mapping.threadTs}` : ""}`;
         }));
 
         return respond({
@@ -180,7 +187,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         const teamId = command.team_id;
 
         const consent = await prisma.consent.findUnique({
-            where: { phoneNumber: number }
+            where: { phoneNumber: hashPhone(number) }
         });
 
         if (!consent) {
@@ -190,11 +197,9 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             });
         }
 
-        // GDPR: delete all data
-        await prisma.consent.delete({ where: { phoneNumber: number } });
-        await prisma.mapping.deleteMany({ where: { phoneNumber: number } });
-        await prisma.pendingConnection.deleteMany({ where: { phoneNumber: number } });
-
+        await prisma.consent.delete({ where: { phoneNumber: hashPhone(number) } });
+        await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(number) } });
+        await prisma.pendingConnection.deleteMany({ where: { phoneNumber: hashPhone(number) } });
         // Notify in channel
         const workspaceInstall = await prisma.workspaceInstall.findUnique({
             where: { teamId }
@@ -680,7 +685,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                 await prisma.processedMessage.create({ data: { messageId } });
 
                 // Consent check
-                const consent = await prisma.consent.findUnique({ where: { phoneNumber: from } });
+                const consent = await prisma.consent.findUnique({ where: { phoneNumber: hashPhone(from) } });
                 console.log("🔍 Consent lookup for:", from, "→ result:", consent);
                 if (!consent || !consent.consentGiven) {
                     console.log("🚫 Blocked image (no consent):", from);
@@ -713,7 +718,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                     // Step 3: Find or create Slack thread
                     let threadTs;
                     const existingMapping = await prisma.mapping.findFirst({
-                        where: { phoneNumber: from, teamId }
+                        where: { phoneNumber: hashPhone(from), teamId }
                     });
 
                     if (!existingMapping) {
@@ -723,7 +728,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                         });
                         threadTs = result.ts.toString();
                         await prisma.mapping.create({
-                            data: { phoneNumber: from, threadTs, teamId }
+                            data: { phoneNumber: hashPhone(from), threadTs, teamId }
                         });
                     } else {
                         threadTs = existingMapping.threadTs;
@@ -781,16 +786,13 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             const stopWords = ["STOP", "UNSUBSCRIBE", "STOPSLACK"];
             if (stopWords.includes(text.trim().toUpperCase())) {
                 const existingConsent = await prisma.consent.findUnique({
-                    where: { phoneNumber: from }
+                    where: { phoneNumber: hashPhone(from) }
                 });
 
                 if (existingConsent) {
-                    // Revoke consent
-                    // GDPR: delete all data for this number
-                    await prisma.consent.delete({ where: { phoneNumber: from } });
-                    await prisma.mapping.deleteMany({ where: { phoneNumber: from } });
-                    await prisma.pendingConnection.deleteMany({ where: { phoneNumber: from } });
-
+                    await prisma.consent.delete({ where: { phoneNumber: hashPhone(from) } });
+                    await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(from) } });
+                    await prisma.pendingConnection.deleteMany({ where: { phoneNumber: hashPhone(from) } });
                     // Notify Slack thread
                     const teamId = existingConsent.teamId || "default_workspace";
                     const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
@@ -800,7 +802,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                     const slackClient = new WebClient(botToken);
 
                     const existingMapping = await prisma.mapping.findFirst({
-                        where: { phoneNumber: from, teamId }
+                        where: { phoneNumber: hashPhone(from), teamId }
                     });
 
                     await slackClient.chat.postMessage({
@@ -844,17 +846,17 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                     return res.sendStatus(200);
                 }
 
-                if (pending.phoneNumber !== from) {
-                    console.log("🚫 Token phone mismatch. Expected:", pending.phoneNumber, "Got:", from);
+                if (pending.phoneNumber !== hashPhone(from)) {
+                    console.log("🚫 Token phone mismatch. Expected:", pending.phoneNumber, "Got:", hashPhone(from));
                     return res.sendStatus(200);
                 }
 
                 console.log("✅ JOIN verified with token:", receivedToken, "for:", from);
 
                 await prisma.consent.upsert({
-                    where: { phoneNumber: from },
+                    where: { phoneNumber: hashPhone(from) },
                     update: { consentGiven: true, teamId: pending.teamId },
-                    create: { phoneNumber: from, consentGiven: true, teamId: pending.teamId }
+                    create: { phoneNumber: hashPhone(from), consentGiven: true, teamId: pending.teamId }
                 });
 
                 await prisma.pendingConnection.delete({ where: { token: receivedToken } });
@@ -892,7 +894,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             // 🔴 CONSENT ENFORCEMENT
             // ===============================
             const consent = await prisma.consent.findUnique({
-                where: { phoneNumber: from }
+                where: { phoneNumber: hashPhone(from) }
             });
 
             if (!consent || !consent.consentGiven) {
@@ -912,7 +914,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             const slackClient = new WebClient(botToken);
 
             const existingMapping = await prisma.mapping.findFirst({
-                where: { phoneNumber: from, teamId }
+                where: { phoneNumber: hashPhone(from), teamId }
             });
 
             if (!existingMapping) {
@@ -923,7 +925,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 
                 await prisma.mapping.create({
                     data: {
-                        phoneNumber: from,
+                        phoneNumber: hashPhone(from),
                         threadTs: result.ts.toString(),
                         teamId
                     }
