@@ -749,7 +749,6 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
     });
 
     // WhatsApp webhook receive
-
     expressApp.post("/webhook", async (req, res) => {
         try {
             const entry = req.body.entry?.[0];
@@ -817,7 +816,12 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                         });
                         threadTs = result.ts.toString();
                         await prisma.mapping.create({
-                            data: { phoneNumber: hashPhone(from), threadTs, teamId }
+                            data: {
+                                phoneNumber: hashPhone(from),
+                                sendTo: from,
+                                threadTs: result.ts.toString(),
+                                teamId
+                            }
                         });
                     } else {
                         threadTs = existingMapping.threadTs;
@@ -1031,6 +1035,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                 await prisma.mapping.create({
                     data: {
                         phoneNumber: hashPhone(from),
+                        sendTo: from,
                         threadTs: result.ts.toString(),
                         teamId
                     }
