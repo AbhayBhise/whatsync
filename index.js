@@ -329,7 +329,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             return respond("❌ This thread is not linked to any WhatsApp user");
         }
 
-        const number = mapping.phoneNumber;
+        const number = mapping.sendTo || mapping.phoneNumber;
 
         await respond(`📤 Sending to ${number}...`);
 
@@ -376,7 +376,7 @@ slackApp.event("message", async ({ event }) => {
         return;
     }
 
-    const number = mapping.phoneNumber;
+    const number = mapping.sendTo || mapping.phoneNumber;
 
     for (const file of (event.files || [])) {
         if (!file.mimetype?.startsWith("image/")) {
@@ -496,7 +496,7 @@ slackApp.message(async ({ message }) => {
         return;
     }
 
-    const number = mapping.phoneNumber;
+    const number = mapping.sendTo || mapping.phoneNumber;
 
     // ===============================
     // Handle image/file attachments
