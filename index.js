@@ -21,6 +21,13 @@ const QRCode = require("qrcode");
 function hashPhone(phoneNumber) {
     return crypto.createHash("sha256").update(phoneNumber.toString().trim()).digest("hex");
 }
+
+function maskPhone(phoneNumber) {
+    const str = phoneNumber.toString();
+    return str.substring(0, 4) + "****" + str.substring(str.length - 2);
+}
+
+
 // ===============================
 // 🔹 AUDIT LOGGING (GDPR)
 // ===============================
@@ -553,7 +560,7 @@ slackApp.event("message", async ({ event }) => {
                         }
                     }
                 );
-                console.log("✅ Image sent Slack→WhatsApp:", number);
+                console.log("✅ Image sent Slack→WhatsApp:", maskPhone(number));
             } catch (imgErr) {
                 const errData = imgErr.response?.data?.error;
                 const code = errData?.code;
@@ -669,7 +676,7 @@ slackApp.message(async ({ message }) => {
                     }
                 );
 
-                console.log("✅ Image sent from Slack → WhatsApp:", number);
+                console.log("✅ Image sent from Slack → WhatsApp:", (maskPhone(number)));
             } catch (err) {
                 console.error("❌ Image Slack→WA error:", err.response?.data || err.message);
             }
@@ -890,9 +897,9 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 
                 // Consent check
                 const consent = await prisma.consent.findUnique({ where: { phoneNumber: hashPhone(from) } });
-                console.log("🔍 Consent lookup for:", from, "→ result:", consent);
+                console.log("🔍 Consent lookup for:", (maskPhone(from)), "→ result:", consent);
                 if (!consent || !consent.consentGiven) {
-                    console.log("🚫 Blocked image (no consent):", from);
+                    console.log("🚫 Blocked image (no consent):", maskPhone(from));
                     return res.sendStatus(200);
                 }
 
@@ -1020,10 +1027,10 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                         text: `🔴 *${from} has opted out.* They sent "${text.trim()}". No further messages will be delivered to or from this number.`
                     });
 
-                    console.log("🔴 Opt-out received from:", from);
+                    console.log("🔴 Opt-out received from:", (maskPhone(from)));
                     await auditLog(hashPhone(from), "UNSUBSCRIBED", "whatsapp_user", existingConsent.teamId || "default_workspace");
                 } else {
-                    console.log("⚠️ STOP from unknown number:", from);
+                    console.log("⚠️ STOP from unknown number:", maskPhone(from));
                 }
 
                 return res.sendStatus(200);
@@ -1051,7 +1058,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                 }
 
                 if (new Date() > pending.expiresAt) {
-                    console.log("⏰ Token expired for:", from);
+                    console.log("⏰ Token expired for:", (maskPhone(from)));
                     await prisma.pendingConnection.delete({ where: { token: receivedToken } });
                     return res.sendStatus(200);
                 }
@@ -1061,7 +1068,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                     return res.sendStatus(200);
                 }
 
-                console.log("✅ JOIN verified with token:", receivedToken, "for:", from);
+                console.log("✅ JOIN verified with token:", receivedToken, "for:", maskPhone(from));
 
                 await prisma.consent.upsert({
                     where: { phoneNumber: hashPhone(from) },
@@ -1070,7 +1077,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                 });
 
                 await prisma.pendingConnection.delete({ where: { token: receivedToken } });
-                console.log("✅ Consent granted and token cleaned up for:", from);
+                console.log("✅ Consent granted and token cleaned up for:", (maskPhone(from)));
                 await auditLog(hashPhone(from), "JOINED", "whatsapp_user", pending.teamId);
                 // Notify Slack that user has joined
                 try {
@@ -1107,7 +1114,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                             }
                         }
                     );
-                    console.log("✅ Welcome message sent to:", from);
+                    console.log("✅ Welcome message sent to:", (maskPhone(from)));
                 } catch (err) {
                     console.error("❌ Welcome message failed:", err.response?.data || err.message);
                 }
@@ -1124,11 +1131,11 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             });
 
             if (!consent || !consent.consentGiven) {
-                console.log("🚫 Blocked (no consent):", from);
+                console.log("🚫 Blocked (no consent):", (maskPhone(from)));
                 return res.sendStatus(200);
             }
 
-            console.log("📩 WhatsApp:", from, text);
+            console.log("📩 WhatsApp:", (maskPhone(from)), text);
             console.log("📌 messageId:", messageId);
 
             // 6. Thread logic — get teamId from consent
@@ -1158,7 +1165,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                     }
                 });
 
-                console.log("🧵 Thread created for", from, "→", result.ts);
+                console.log("🧵 Thread created for", (maskPhone(from)), "→", result.ts);
 
             } else {
                 await slackClient.chat.postMessage({
