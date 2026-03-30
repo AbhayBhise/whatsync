@@ -134,13 +134,17 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         const BUSINESS_NUMBER = process.env.WHATSAPP_BUSINESS_NUMBER;
         const waLink = `https://wa.me/${BUSINESS_NUMBER}?text=JOIN-${token}`;
 
+        // Generate QR code as PNG buffer
+        const qrBuffer = await QRCode.toBuffer(waLink, { width: 300, margin: 2 });
 
-        // Save channel if not set yet
+        // Upload QR to Slack
+        // Upload QR to Slack using workspace token
         const { WebClient } = require("@slack/web-api");
         const wsInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
         const wsToken = wsInstall?.botToken || process.env.SLACK_BOT_TOKEN;
         const slackClient = new WebClient(wsToken);
 
+        // Save channel if not set yet
         if (wsInstall && !wsInstall.channelId) {
             await prisma.workspaceInstall.update({
                 where: { teamId },
@@ -149,14 +153,16 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         }
 
         try {
-            await slackClient.chat.postMessage({
-                channel: command.channel_id,
-                text: `📲 *Onboarding link for ${number}*\n\nShare this link with the user. They click it → WhatsApp opens → tap Send.\n\n🔗 ${waLink}\n\n⏳ Expires in 24 hours.`
+            await slackClient.files.uploadV2({
+                channel_id: command.channel_id,
+                file: qrBuffer,
+                filename: `connect-${number}.png`,
+                initial_comment: `📲 *Onboarding QR for ${number}*\n\nShare this QR code with the user. They scan it → WhatsApp opens → tap Send.\n\n⏳ Expires in 24 hours.\n🔗 Direct link: ${waLink}`
             });
 
             await respond({
                 response_type: "ephemeral",
-                text: `✅ Onboarding link posted in channel for ${number}.`
+                text: `✅ QR code posted in channel for ${number}.`
             });
         } catch (err) {
             if (err.data?.error === "not_in_channel") {
