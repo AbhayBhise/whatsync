@@ -109,8 +109,9 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         const teamId = command.team_id;
 
         // Check if number already connected
-        const existingConsent = await prisma.consent.findUnique({
-            where: { phoneNumber: hashPhone(number) }
+        // Check if number already connected IN THIS WORKSPACE
+        const existingConsent = await prisma.consent.findFirst({
+            where: { phoneNumber: hashPhone(number), teamId }
         });
 
         if (existingConsent && existingConsent.consentGiven) {
@@ -151,17 +152,31 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             });
         }
 
-        await slackClient.files.uploadV2({
-            channel_id: command.channel_id,
-            file: qrBuffer,
-            filename: `connect-${number}.png`,
-            initial_comment: `📲 *Onboarding QR for ${number}*\n\nShare this QR code with the user. They scan it → WhatsApp opens → tap Send.\n\n⏳ Expires in 24 hours.\n🔗 Direct link: ${waLink}`
-        });
+        try {
+            await slackClient.files.uploadV2({
+                channel_id: command.channel_id,
+                file: qrBuffer,
+                filename: `connect-${number}.png`,
+                initial_comment: `📲 *Onboarding QR for ${number}*\n\nShare this QR code with the user. They scan it → WhatsApp opens → tap Send.\n\n⏳ Expires in 24 hours.\n🔗 Direct link: ${waLink}`
+            });
 
-        await respond({
-            response_type: "ephemeral",
-            text: `✅ QR code posted in channel for ${number}.`
-        });
+            await respond({
+                response_type: "ephemeral",
+                text: `✅ QR code posted in channel for ${number}.`
+            });
+        } catch (err) {
+            if (err.data?.error === "not_in_channel") {
+                await respond({
+                    response_type: "ephemeral",
+                    text: `⚠️ *Whatsync Bridge is not in this channel.*\n\nPlease run this first:\n\`/invite @Whatsync Bridge\`\n\nThen try again.`
+                });
+            } else {
+                await respond({
+                    response_type: "ephemeral",
+                    text: `❌ Error: ${err.message}`
+                });
+            }
+        }
         return;
     }
     // ===============================
