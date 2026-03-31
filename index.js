@@ -75,8 +75,14 @@ const slackApp = new App({
 receiver.app.use(express.json());
 receiver.app.use(express.urlencoded({ extended: true }));
 
-// app.use(express.json());
-// app.use(express.urlencoded({ extended: true }));
+const rateLimit = require("express-rate-limit");
+receiver.app.use("/webhook", rateLimit({
+    windowMs: 1 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: "Too many requests, please try again later."
+}));
 receiver.app.use((req, res, next) => {
     console.log("👉 Incoming request:", req.method, req.url);
     next();
