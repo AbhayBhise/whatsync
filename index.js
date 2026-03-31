@@ -499,22 +499,16 @@ slackApp.event("message", async ({ event }) => {
     }));
 
     const threadTs = event.thread_ts.toString();
-const mapping = await prisma.mapping.findFirst({
-    where: { threadTs }
-});
-
-if (!mapping) {
-    console.log("❌ No mapping for this thread");
-    return;
-}
-
-const teamId = mapping.teamId; // correct workspace from DB
+    const mapping = await prisma.mapping.findFirst({
+        where: { threadTs }
+    });
 
     if (!mapping) {
         console.log("❌ No mapping for this thread");
         return;
     }
 
+    const teamId = mapping.teamId;
     const number = mapping.sendTo || mapping.phoneNumber;
 
     for (const file of (event.files || [])) {
