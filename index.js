@@ -493,10 +493,16 @@ slackApp.event("message", async ({ event }) => {
     }));
 
     const threadTs = event.thread_ts.toString();
-    const teamId = event.team || event.user_team || "default_workspace";
-    const mapping = await prisma.mapping.findFirst({
-        where: { threadTs }
-    });
+const mapping = await prisma.mapping.findFirst({
+    where: { threadTs }
+});
+
+if (!mapping) {
+    console.log("❌ No mapping for this thread");
+    return;
+}
+
+const teamId = mapping.teamId; // correct workspace from DB
 
     if (!mapping) {
         console.log("❌ No mapping for this thread");
@@ -512,24 +518,17 @@ slackApp.event("message", async ({ event }) => {
         }
 
         try {
-            const botToken = process.env.SLACK_BOT_TOKEN;
+            const wsInstallForDownload = await prisma.workspaceInstall.findUnique({
+                where: { teamId }
+            });
+            const botToken = wsInstallForDownload?.botToken || process.env.SLACK_BOT_TOKEN;
 
-            // Step 1: Download from Slack using native https (respects IPv4 setting)
-            const imageRes = await new Promise((resolve, reject) => {
-                const https = require("https");
-                const url = new URL(file.url_private);
-                const options = {
-                    hostname: url.hostname,
-                    path: url.pathname + url.search,
-                    headers: { Authorization: `Bearer ${botToken}` },
-                    family: 4
-                };
-                https.get(options, (res) => {
-                    const chunks = [];
-                    res.on("data", chunk => chunks.push(chunk));
-                    res.on("end", () => resolve({ data: Buffer.concat(chunks) }));
-                    res.on("error", reject);
-                }).on("error", reject);
+            // Step 1: Download from Slack (axios follows redirects; Slack url_private redirects to CDN)
+            const https = require("https");
+            const imageRes = await axios.get(file.url_private, {
+                responseType: "arraybuffer",
+                headers: { Authorization: `Bearer ${botToken}` },
+                httpsAgent: new https.Agent({ family: 4 })
             });
 
             // Step 2: Upload to Meta
@@ -642,10 +641,12 @@ slackApp.message(async ({ message }) => {
                 });
                 const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
 
-                // Step 1: Download image from Slack
+                // Step 1: Download image from Slack (axios follows redirects to CDN)
+                const https = require("https");
                 const imageRes = await axios.get(file.url_private, {
                     responseType: "arraybuffer",
-                    headers: { Authorization: `Bearer ${botToken}` }
+                    headers: { Authorization: `Bearer ${botToken}` },
+                    httpsAgent: new https.Agent({ family: 4 })
                 });
 
                 // Step 2: Upload to Meta media endpoint
@@ -655,7 +656,7 @@ slackApp.message(async ({ message }) => {
                     filename: file.name || "image.jpg",
                     contentType: file.mimetype
                 });
-                form.append("type", "image/jpeg");
+                form.append("type", file.mimetype);
                 form.append("messaging_product", "whatsapp");
 
                 const uploadRes = await axios.post(
