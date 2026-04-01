@@ -1,290 +1,153 @@
 # ⚡ WHATSYNC BRIDGE
-### *Slack ↔ WhatsApp. Bi-directional. Real-time. GDPR-compliant.*
+### *Connecting Teams. Bridging Conversations.*
 
-> **Neobim Hackathon 2026** — Full Product Submission  
-> Live at: `https://whatsync-production.up.railway.app`
+> **Slack ↔ WhatsApp  •  Real-time  •  GDPR-Compliant  •  Enterprise-Ready**  
+> **Neobim Hackathon 2026**
+
+🌐 **Live:** https://whatsyncr.onrender.com  
+➕ **Install:** [Add to Slack](https://whatsyncr.onrender.com)
 
 ---
 
-## 🎯 What It Does
+## The Problem
 
-Whatsync Bridge connects your **Slack workspace** to **WhatsApp** — so your team never has to leave Slack to communicate with external contacts.
+Modern businesses run internal operations on Slack and external communications on WhatsApp — two worlds that don't talk to each other. Teams resort to manual forwarding, screenshot sharing, and constant context-switching.
+
+**Whatsync Bridge eliminates this gap entirely.**
+
+---
+
+## What It Does
 
 ```
-Slack User types /whatsapp1 918XXXXXXXXXX
-        ↓
-QR code generated in channel
-        ↓
-External user scans → taps Send
-        ↓
-Secure token verified → Consent granted
-        ↓
-Full bi-directional bridge: text + images, both ways
+External contact messages on WhatsApp
+              ↓
+Appears instantly in your Slack thread
+              ↓
+Your team replies in Slack
+              ↓
+Delivered to WhatsApp in real time
 ```
 
 No third-party apps. No manual forwarding. No missed messages.
 
 ---
 
-## ✅ Feature Checklist (Plan vs Built)
+## Three Messaging Modes
 
-| Feature | Planned | Status |
+| Mode | Trigger | Result |
 |---|---|---|
-| Two-way text messaging | ✅ | ✅ **Done** |
-| Two-way image transfer | ✅ | ✅ **Done** |
-| Image captions | ✅ | ✅ **Done** |
-| Slack slash command `/whatsapp1` | ✅ | ✅ **Done** |
-| QR code onboarding | ✅ | ✅ **Done** |
-| WhatsApp opt-in confirmation | ✅ | ✅ **Done** |
-| Token-based secure JOIN | ✅ | ✅ **Done** |
-| 24hr token expiry | ✅ | ✅ **Done** |
-| Thread persistence (restart-safe) | ✅ | ✅ **Done** |
-| Message deduplication | ✅ | ✅ **Done** |
-| GDPR explicit opt-in | ✅ | ✅ **Done** |
-| GDPR right to erasure | ✅ | ✅ **Done** — immediate deletion |
-| GDPR phone number hashing | ✅ | ✅ **Done** — sha256 |
-| GDPR audit log | ✅ | ✅ **Done** — full event history |
-| GDPR EU data residency | ✅ | ✅ **Done** — Amsterdam |
-| `/whatsapp1 list` | ✅ | ✅ **Done** |
-| `/whatsapp1 remove` | ✅ | ✅ **Done** |
-| `/whatsapp1 ping` | ✅ | ✅ **Done** |
-| `/whatsapp1 audit` | ✅ | ✅ **Done** |
-| `/whatsapp1 setchannel` | ✅ | ✅ **Done** |
-| Slack OAuth multi-workspace | ✅ | ✅ **Done** |
-| Deployed on Railway (EU) | ✅ | ✅ **Done** |
-| Sentry error monitoring | ✅ | ✅ **Done** |
-| Auto CI/CD (Railway + GitHub) | ✅ | ✅ **Done** |
-| Welcome message on join | ✅ | ✅ **Done** |
-| Removal notification to WA user | ✅ | ✅ **Done** |
-| Graceful 24hr session error feedback | ✅ | ✅ **Done** |
-| Redis/BullMQ message queue | ✅ | 🔜 v2 — not needed at MVP scale |
+| **1:1 Private** | Reply inside a Slack thread | Only that WhatsApp user receives it |
+| **Broadcast** | Type in the main Slack channel | ALL connected WhatsApp users receive it |
+| **@all from WA** | WhatsApp user sends `@all message` | Posted in Slack channel — visible to everyone |
 
 ---
 
-## 🔐 Security & GDPR
+## Feature Highlights
 
-### Phone Number Hashing
-Phone numbers are **never stored in plaintext**. Every number is hashed with `sha256` before being written to the database:
-```js
-sha256("918459679367") → "0d8601a914154af6..."
-```
-The real number is only used for WhatsApp API delivery and never persisted.
-
-### Secure Token Onboarding
-No guessable JOINs. Every onboarding link is unique:
-```
-https://wa.me/15551855876?text=JOIN-1419028b3d0f641f22d3ed59dc68d33d
-```
-- Token tied to specific phone number
-- 24-hour expiry
-- Single use — deleted on match
-- Mismatch = rejected
-
-### Consent Enforcement
-Zero messages pass without explicit consent:
-```
-No JOIN → No messages. Period.
-```
-
-### Right to Erasure
-Three keywords trigger immediate full data deletion:
-- `STOP`
-- `UNSUBSCRIBE`  
-- `STOPSLACK`
-
-All records deleted instantly — Consent, Mapping, PendingConnection.
-
-### Audit Log
-Every event is logged permanently — even after data deletion:
-```
-JOINED        — whatsapp_user       — 30/3/2026 3:09am
-PINGED        — slack_user:U0AP...  — 30/3/2026 3:10am
-UNSUBSCRIBED  — whatsapp_user       — 30/3/2026 3:14am
-JOINED        — whatsapp_user       — 30/3/2026 3:17am
-REMOVED       — slack_user:U0AP...  — 30/3/2026 3:18am
-```
-
----
-
-## 🗄️ Database Models
-
-| Model | Purpose |
+| Category | Features |
 |---|---|
-| `Mapping` | phoneHash ↔ Slack threadTs ↔ teamId |
-| `ProcessedMessage` | Deduplication by messageId |
-| `PendingConnection` | Onboarding intent + token + TTL |
-| `Consent` | Authorization gate — hashed phone |
-| `WorkspaceInstall` | Multi-workspace OAuth tokens |
-| `AuditLog` | GDPR tamper-proof event history |
+| **Messaging** | Text + images both directions, captions, broadcast, @all |
+| **Onboarding** | Secure QR + link, cryptographic token, 24hr expiry |
+| **GDPR** | Explicit opt-in, right to erasure, EU hosting, audit log |
+| **Security** | Phone hashing, masked logs, consent enforcement, rate limiting |
+| **Commands** | list, remove, ping, audit, setchannel, reply |
+| **Multi-workspace** | OAuth install, per-workspace isolation, workspace switching |
+| **Monitoring** | Error tracking, uptime monitoring, auto CI/CD |
 
 ---
 
-## 🚀 Tech Stack
+## Security at a Glance
 
-| Component | Technology |
+🔐 **Zero plaintext PII** — phone numbers are cryptographically hashed before any storage  
+🔐 **Token onboarding** — unique, time-limited, single-use, phone-bound tokens  
+🔐 **Consent gate** — no message passes without verified explicit opt-in  
+🔐 **Right to erasure** — STOP / UNSUBSCRIBE / STOPSLACK triggers instant full deletion  
+🔐 **Masked logs** — phone numbers never appear in server logs  
+🔐 **EU residency** — server in Frankfurt, database in Amsterdam  
+
+---
+
+## GDPR Compliance
+
+| Requirement | Status |
+|---|---|
+| Explicit opt-in | ✅ Cryptographic token flow |
+| Right to erasure | ✅ Immediate, complete, irreversible |
+| Data minimisation | ✅ Zero message content stored |
+| Pseudonymisation | ✅ sha256 — unrecoverable |
+| EU data residency | ✅ Frankfurt + Amsterdam |
+| Audit trail | ✅ Survives data deletion |
+
+---
+
+## Technology Stack
+
+| Layer | Technology |
 |---|---|
 | Runtime | Node.js 18 |
-| HTTP Server | Express + Slack Bolt SDK |
+| Slack | Slack Bolt SDK (OAuth, Events, Commands) |
+| WhatsApp | Meta Cloud API |
 | Database | PostgreSQL + Prisma ORM |
-| Slack Integration | Slack Bolt (OAuth, Events, Commands) |
-| WhatsApp Integration | Meta Cloud API v22.0 |
-| Hosting | Railway (EU West — Amsterdam) |
-| Error Monitoring | Sentry |
-| CI/CD | GitHub → Railway auto-deploy |
+| Server | Render — EU Frankfurt |
+| DB Host | Railway — EU Amsterdam |
+| Monitoring | Sentry + UptimeRobot |
+| CI/CD | GitHub → Render (auto-deploy) |
 
 ---
 
-## 📋 All Slash Commands
+## All Slash Commands
 
 ```
-/whatsapp1 <number>         Onboard a new WhatsApp user (generates QR)
-/whatsapp1 list             Show all connected users
-/whatsapp1 remove <number>  Disconnect a user (GDPR deletion)
-/whatsapp1 ping <number>    Nudge user to start conversation
-/whatsapp1 audit <number>   View full GDPR audit history
-/whatsapp1 setchannel       Set this channel as bridge channel
-/whatsapp1 reply <message>  Reply to WhatsApp from thread
-```
-
----
-
-## 🔁 System Flow
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    ONBOARDING                        │
-│                                                     │
-│  Slack: /whatsapp1 918XXXXXXXXXX                    │
-│         → token generated → QR posted in channel   │
-│                                                     │
-│  WA User: scans QR → sends JOIN-<token>             │
-│         → token verified → consent stored (hashed) │
-│         → welcome message sent to WA               │
-│         → Slack notified: "user has joined"         │
-└─────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────┐
-│              MESSAGING (BOTH DIRECTIONS)             │
-│                                                     │
-│  WA → Slack:                                        │
-│    text/image → webhook → consent check →           │
-│    thread created (or reused) → posted in Slack     │
-│                                                     │
-│  Slack → WA:                                        │
-│    reply in thread → sendTo lookup →                │
-│    Meta API → delivered to WA                       │
-└─────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────┐
-│                   OPT-OUT                            │
-│                                                     │
-│  WA User sends: STOP / UNSUBSCRIBE / STOPSLACK      │
-│    → all data deleted immediately                   │
-│    → Slack notified                                 │
-│    → audit log entry created                        │
-└─────────────────────────────────────────────────────┘
+/whatsapp1 <number>         Onboard a new WhatsApp user
+/whatsapp1 list             View all connected users
+/whatsapp1 remove <number>  Disconnect + GDPR full erasure
+/whatsapp1 ping <number>    Re-initiate expired session
+/whatsapp1 audit <number>   View full GDPR event history
+/whatsapp1 setchannel       Set bridge channel for this workspace
+/whatsapp1 reply <message>  Reply via slash command
 ```
 
 ---
 
-## ⚙️ Setup & Run
-
-### Prerequisites
-- Node.js 18+
-- PostgreSQL (Railway)
-- Meta WhatsApp Business API account
-- Slack workspace + app
-
-### Environment Variables
-```env
-SLACK_BOT_TOKEN=xoxb-...
-SLACK_SIGNING_SECRET=...
-SLACK_CHANNEL_ID=C...
-SLACK_CLIENT_ID=...
-SLACK_CLIENT_SECRET=...
-WHATSAPP_TOKEN=EAA...
-PHONE_NUMBER_ID=...
-WHATSAPP_BUSINESS_NUMBER=15551855876
-DATABASE_URL=postgresql://...
-APP_URL=https://whatsync-production.up.railway.app
-SENTRY_DSN=https://...
-```
-
-### Run Locally
-```bash
-npm install
-npx prisma generate
-npx prisma migrate dev
-node index.js
-```
-
-### Deploy
-Push to `main` branch → Railway auto-deploys. ✅
-
----
-
-## 📍 Important Notes for Evaluators
-
-### Meta Sandbox Restriction
-The system uses a WhatsApp Business **sandbox number**. In sandbox mode:
-- Outbound messages only reach manually allowlisted numbers
-- Add test numbers at: Meta Developer Console → WhatsApp → API Setup → Allowed Recipients
-
-In production: Template messages enable outbound to any number without pre-approval.
-
-### Multi-Workspace Installation
-1. Go to `https://whatsync-production.up.railway.app`
-2. Click **"Add to Slack"**
-3. Authorize for your workspace
-4. Run `/whatsapp1 setchannel` in your desired channel
-5. Start using `/whatsapp1 <number>`
-
-### Private Channels
-For private Slack channels, first run:
-```
-/invite @Whatsync Bridge
-```
-Public channels work automatically.
-
-### 24-Hour Session Window
-WhatsApp allows free-form replies only within 24 hours of the user's last message. If the window expires:
-- Slack is notified automatically with instructions
-- Use `/whatsapp1 ping <number>` to ask the user to re-initiate
-
----
-
-## 📊 Architecture
+## Architecture
 
 ```
-GitHub (main branch)
-    ↓ auto-deploy
-Railway (EU West - Amsterdam)
-    ├── whatsync (Node.js server)
-    │   ├── Slack Bolt (commands + events)
-    │   ├── Meta Webhook (WA messages)
-    │   ├── Sentry (error monitoring)
-    │   └── Prisma Client
-    └── PostgreSQL (persistent state)
-            ├── Mapping
-            ├── Consent (hashed phones)
-            ├── AuditLog
-            ├── WorkspaceInstall
-            ├── PendingConnection
-            └── ProcessedMessage
+┌─────────────────┐      ┌──────────────────────┐      ┌──────────────┐
+│   Slack Teams   │◀────▶│   Whatsync Bridge    │◀────▶│  WA Users   │
+│  (N workspaces) │      │   Render EU Central  │      │  (verified) │
+└─────────────────┘      │                      │      └──────────────┘
+                         │  ┌────────────────┐  │
+                         │  │  PostgreSQL DB  │  │
+                         │  │  EU Amsterdam   │  │
+                         │  └────────────────┘  │
+                         └──────────────────────┘
 ```
 
 ---
 
-## 🏆 What Makes This Stand Out
+## Scale Design
 
-1. **Production-grade security** — sha256 phone hashing, token-based onboarding, consent enforcement
-2. **Full GDPR compliance** — hashing, erasure, EU hosting, audit log that survives deletion
-3. **Graceful error handling** — every failure notifies Slack with actionable instructions
-4. **Zero plaintext PII** — phone numbers never stored in plaintext anywhere
-5. **Tamper-proof audit trail** — full lifecycle logging per user
-6. **True multi-workspace** — OAuth install, per-workspace tokens and channels
-7. **Production deployment** — EU-hosted, auto CI/CD, Sentry monitoring
+Each workspace operates in complete isolation with its own bot token, channel binding, and user list. In production, each workspace receives a dedicated WhatsApp Business number — the same model used by Intercom, Clerk Chat, and Zendesk.
+
+| Scale | Workspaces | Est. Cost | Est. Revenue |
+|---|---|---|---|
+| Early | 1,000 | ~$0 | $1,000+/month |
+| Growth | 100,000 | ~$4,000/month | $100,000+/month |
+| Scale | 1,000,000 | ~$40,000/month | $1,000,000+/month |
 
 ---
 
-*Built for Neobim Hackathon 2026 — Team Whatsync*
+## What Makes This Stand Out
+
+1. **Production-grade from day one** — not a prototype, live on EU infrastructure
+2. **Three messaging modes** — private threads + broadcast + @all bidirectional
+3. **Enterprise security** — zero plaintext PII, cryptographic onboarding, consent enforcement
+4. **Full GDPR compliance** — right to erasure, EU hosting, tamper-proof audit log
+5. **True multi-workspace** — any Slack workspace installs with one click
+6. **Designed for scale** — architecture supports millions of workspaces
+
+---
+
+> *Built for Neobim Hackathon 2026 — Team Whatsync*  
+> 🌐 https://whatsyncr.onrender.com
