@@ -88,7 +88,14 @@ receiver.app.use((req, res, next) => {
     console.log("👉 Incoming request:", req.method, req.url);
     next();
 });
-
+// Ignore Slack retry attempts to prevent duplicate broadcasts
+receiver.app.use((req, res, next) => {
+    if (req.headers["x-slack-retry-num"]) {
+        console.log("⚠️ Slack retry ignored:", req.headers["x-slack-retry-num"]);
+        return res.sendStatus(200);
+    }
+    next();
+});
 if (!process.env.WHATSAPP_TOKEN || !process.env.PHONE_NUMBER_ID) {
     console.error("Missing environment variables");
     process.exit(1);
@@ -968,19 +975,169 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
     const expressApp = receiver.app;
     // Attach ONLY your routes (not whole app)
     expressApp.get("/", (req, res) => {
-        const clientId = process.env.SLACK_CLIENT_ID;
-        const appUrl = process.env.APP_URL;
-        res.send(`
-        <html><body style="font-family:sans-serif;text-align:center;padding:50px">
-        <h1>Whatsync Bridge</h1>
-        <p>Connect WhatsApp to your Slack workspace</p>
-        <a href="https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=channels:history,chat:write,commands,files:read,files:write&redirect_uri=${appUrl}/slack/oauth_redirect"
-           style="background:#4A154B;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-size:16px">
-           Add to Slack
-        </a>
-        </body></html>
-    `);
-    });
+    const clientId = process.env.SLACK_CLIENT_ID;
+    const appUrl = process.env.APP_URL;
+    const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=channels:history,chat:write,commands,files:read,files:write,channels:read,incoming-webhook&redirect_uri=${appUrl}/slack/oauth_redirect`;
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="slack-app-id" content="A0AP7C4Q7MF">
+<title>Whatsync Bridge — Slack ↔ WhatsApp</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0a0f;color:#fff;overflow-x:hidden}
+.orb{position:fixed;border-radius:50%;filter:blur(90px);opacity:0.12;animation:float 9s ease-in-out infinite;pointer-events:none;z-index:0}
+.orb1{width:600px;height:600px;background:#4A154B;top:-150px;left:-150px;animation-delay:0s}
+.orb2{width:500px;height:500px;background:#25D366;top:30%;right:-150px;animation-delay:3s}
+.orb3{width:400px;height:400px;background:#1565C0;bottom:0;left:15%;animation-delay:6s}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-25px)}}
+.grid{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.025) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+canvas{position:fixed;inset:0;pointer-events:none;z-index:1}
+.wrap{position:relative;z-index:10;max-width:1000px;margin:0 auto;padding:60px 24px}
+.badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:100px;padding:6px 18px;font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:28px;animation:up 0.7s ease both}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#25D366;animation:blink 1.5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+h1{font-size:clamp(38px,6vw,68px);font-weight:800;line-height:1.1;text-align:center;margin-bottom:20px;animation:up 0.7s 0.1s ease both}
+.gt{background:linear-gradient(135deg,#8B2FC9,#4A154B 40%,#25D366);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sub{font-size:17px;color:rgba(255,255,255,0.45);text-align:center;max-width:480px;margin:0 auto 36px;line-height:1.65;animation:up 0.7s 0.2s ease both}
+.slack-btn-wrap{display:flex;justify-content:center;margin-bottom:14px;animation:up 0.7s 0.3s ease both}
+.slack-btn-wrap a{display:inline-block;transition:transform 0.2s,filter 0.2s}
+.slack-btn-wrap a:hover{transform:translateY(-3px);filter:brightness(1.1)}
+.slack-btn-wrap img{height:52px;width:auto}
+.hint{text-align:center;font-size:12px;color:rgba(255,255,255,0.2);margin-bottom:52px;animation:up 0.7s 0.4s ease both}
+.flow{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:60px;animation:up 0.7s 0.5s ease both;flex-wrap:wrap}
+.ftag{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:100px;padding:8px 18px;font-size:13px;color:rgba(255,255,255,0.65)}
+.fd{width:8px;height:8px;border-radius:50%}
+.arr{color:rgba(255,255,255,0.2);font-size:20px}
+.sec-label{text-align:center;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.22);margin-bottom:22px}
+.demos{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:60px}
+.demo-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:16px;overflow:hidden;animation:up 0.7s ease both}
+.demo-card:nth-child(1){animation-delay:0.6s}.demo-card:nth-child(2){animation-delay:0.75s}.demo-card:nth-child(3){animation-delay:0.9s}
+.demo-screen{aspect-ratio:16/9;background:#111318;border-bottom:1px solid rgba(255,255,255,0.06);padding:10px;overflow:hidden}
+.slack-bar{display:flex;align-items:center;gap:5px;margin-bottom:8px}
+.sbd{width:5px;height:5px;border-radius:50%}
+.chan{font-size:7px;color:rgba(255,255,255,0.25);margin-left:4px}
+.mr{display:flex;align-items:flex-start;gap:5px;margin-bottom:5px}
+.av{width:16px;height:16px;border-radius:4px;flex-shrink:0;margin-top:1px}
+.mb{background:rgba(255,255,255,0.05);border-radius:5px;padding:3px 6px;font-size:7.5px;color:rgba(255,255,255,0.65);line-height:1.4;max-width:88%}
+.mb.cmd{background:rgba(74,21,75,0.35);color:#d4a0f0;font-family:monospace}
+.mb.ok{background:rgba(37,211,102,0.12);color:#80f0a8}
+.mb.nfo{background:rgba(21,101,192,0.2);color:#90c8f8}
+.ibar{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,0.04);border-radius:5px;padding:4px 7px;margin-top:5px}
+.itext{font-size:6.5px;color:rgba(255,255,255,0.35);font-family:monospace;flex:1}
+.sbtn{width:11px;height:11px;background:#4A154B;border-radius:3px;flex-shrink:0}
+.demo-info{padding:12px 14px}
+.demo-cmd{font-size:10.5px;font-family:monospace;color:#c98de8;margin-bottom:4px}
+.demo-desc{font-size:10.5px;color:rgba(255,255,255,0.38);line-height:1.55}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;margin-bottom:52px}
+.feat{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:13px;padding:16px;animation:up 0.7s ease both}
+.feat:nth-child(1){animation-delay:1.0s}.feat:nth-child(2){animation-delay:1.1s}.feat:nth-child(3){animation-delay:1.2s}
+.feat:nth-child(4){animation-delay:1.3s}.feat:nth-child(5){animation-delay:1.4s}.feat:nth-child(6){animation-delay:1.5s}
+.feat-ico{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:9px}
+.feat h3{font-size:12.5px;font-weight:600;margin-bottom:4px}
+.feat p{font-size:11px;color:rgba(255,255,255,0.32);line-height:1.5}
+.footer{text-align:center;padding-top:32px;border-top:1px solid rgba(255,255,255,0.06)}
+.footer-top{font-size:12px;color:rgba(255,255,255,0.18);margin-bottom:10px}
+.team{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:14px}
+.team-member{font-size:11px;color:rgba(255,255,255,0.28);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:100px;padding:4px 12px}
+.footer-link{color:rgba(255,255,255,0.22);font-size:11px;text-decoration:none}
+.footer-link:hover{color:rgba(255,255,255,0.4)}
+@keyframes up{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:640px){.demos,.features{grid-template-columns:1fr}.flow{gap:6px}}
+</style>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="orb orb3"></div>
+<div class="grid"></div>
+<canvas id="c"></canvas>
+<div class="wrap">
+  <div style="text-align:center">
+    <div class="badge"><span class="live-dot"></span>Live &middot; EU Hosted &middot; GDPR Compliant</div>
+  </div>
+  <h1>Connect <span class="gt">Slack</span> to<br><span class="gt">WhatsApp</span></h1>
+  <p class="sub">Real-time bi-directional messaging bridge for your team. Text, images, broadcasts &mdash; one click install.</p>
+  <div class="slack-btn-wrap">
+    <a href="${oauthUrl}">
+      <img alt="Add to Slack" height="52" src="https://platform.slack-edge.com/img/add_to_slack@2x.png" />
+    </a>
+  </div>
+  <p class="hint">Free &middot; No credit card &middot; Works with any Slack workspace</p>
+  <div class="flow">
+    <div class="ftag"><span class="fd" style="background:#4A154B"></span>Slack workspace</div>
+    <span class="arr">&#8644;</span>
+    <div class="ftag"><span class="fd" style="background:#1565C0"></span>Whatsync Bridge</div>
+    <span class="arr">&#8644;</span>
+    <div class="ftag"><span class="fd" style="background:#25D366"></span>WhatsApp users</div>
+  </div>
+  <p class="sec-label">See it in action</p>
+  <div class="demos">
+    <div class="demo-card">
+      <div class="demo-screen">
+        <div class="slack-bar"><div class="sbd" style="background:#ff5f57"></div><div class="sbd" style="background:#febc2e"></div><div class="sbd" style="background:#28c840"></div><span class="chan">#bridge-channel</span></div>
+        <div class="mr"><div class="av" style="background:#4A154B"></div><div class="mb cmd">/whatsapp1 918XXXXXXXXXX</div></div>
+        <div class="mr"><div class="av" style="background:#1565C0"></div><div><div class="mb ok">&#128247; QR code posted in channel</div><div class="mb ok" style="margin-top:3px">&#128279; Direct link ready &middot; 24hr expiry</div></div></div>
+        <div class="mr"><div class="av" style="background:#25D366"></div><div class="mb nfo">&#9989; 918XX has joined the bridge!</div></div>
+        <div class="ibar"><div class="itext">/whatsapp1 918XXXXXXXXXX</div><div class="sbtn"></div></div>
+      </div>
+      <div class="demo-info"><div class="demo-cmd">/whatsapp1 &lt;number&gt;</div><div class="demo-desc">Generates a secure QR + link. User scans &rarr; joins in seconds with full consent flow.</div></div>
+    </div>
+    <div class="demo-card">
+      <div class="demo-screen">
+        <div class="slack-bar"><div class="sbd" style="background:#ff5f57"></div><div class="sbd" style="background:#febc2e"></div><div class="sbd" style="background:#28c840"></div><span class="chan">#bridge-channel</span></div>
+        <div class="mr"><div class="av" style="background:#25D366"></div><div class="mb nfo">&#128241; 918XX: Hey! Got your message</div></div>
+        <div class="mr"><div class="av" style="background:#25D366"></div><div class="mb nfo">&#128206; 918XX sent an image</div></div>
+        <div class="mr"><div class="av" style="background:#4A154B"></div><div class="mb cmd">Thanks! Sending the doc now</div></div>
+        <div class="mr"><div class="av" style="background:#1565C0"></div><div class="mb ok">&#9989; Delivered to WhatsApp</div></div>
+        <div class="ibar"><div class="itext">Reply in thread &rarr; goes to WhatsApp</div><div class="sbtn"></div></div>
+      </div>
+      <div class="demo-info"><div class="demo-cmd">Thread reply</div><div class="demo-desc">Reply in any Slack thread &mdash; delivered directly to that WhatsApp user instantly.</div></div>
+    </div>
+    <div class="demo-card">
+      <div class="demo-screen">
+        <div class="slack-bar"><div class="sbd" style="background:#ff5f57"></div><div class="sbd" style="background:#febc2e"></div><div class="sbd" style="background:#28c840"></div><span class="chan">#bridge-channel</span></div>
+        <div class="mr"><div class="av" style="background:#4A154B"></div><div class="mb cmd">Team meeting at 5pm today!</div></div>
+        <div class="mr"><div class="av" style="background:#1565C0"></div><div><div class="mb ok">&#128226; Broadcast sent to 3 WA users</div><div class="mb ok" style="margin-top:3px">&rarr; 918XX &#10003; &rarr; 919XX &#10003; &rarr; 917XX &#10003;</div></div></div>
+        <div class="mr"><div class="av" style="background:#25D366"></div><div class="mb nfo">&#128226; @all: Running 10 min late!</div></div>
+        <div class="ibar"><div class="itext">Channel message &rarr; all WA users</div><div class="sbtn"></div></div>
+      </div>
+      <div class="demo-info"><div class="demo-cmd">Broadcast mode</div><div class="demo-desc">Channel messages reach all WA users. WA users send @all back to the channel.</div></div>
+    </div>
+  </div>
+  <p class="sec-label">Everything included</p>
+  <div class="features">
+    <div class="feat"><div class="feat-ico" style="background:rgba(74,21,75,0.2)">&#128172;</div><h3>Bi-directional</h3><p>Text + images both directions in real time</p></div>
+    <div class="feat"><div class="feat-ico" style="background:rgba(37,211,102,0.12)">&#128226;</div><h3>Broadcast</h3><p>Channel &rarr; all WA users &middot; @all WA &rarr; channel</p></div>
+    <div class="feat"><div class="feat-ico" style="background:rgba(21,101,192,0.2)">&#128274;</div><h3>GDPR Compliant</h3><p>sha256 hashing &middot; EU hosting &middot; audit log</p></div>
+    <div class="feat"><div class="feat-ico" style="background:rgba(255,193,7,0.12)">&#9889;</div><h3>Multi-workspace</h3><p>One-click OAuth install for any workspace</p></div>
+    <div class="feat"><div class="feat-ico" style="background:rgba(233,30,99,0.12)">&#128737;</div><h3>Consent gate</h3><p>Explicit opt-in &middot; STOP/UNSUBSCRIBE anytime</p></div>
+    <div class="feat"><div class="feat-ico" style="background:rgba(156,39,176,0.15)">&#128203;</div><h3>Audit trail</h3><p>Full GDPR event history per user</p></div>
+  </div>
+  <div class="footer">
+    <p class="footer-top">Neobim Hackathon 2026 &middot; Team WhatSync A</p>
+    <div class="team">
+      <span class="team-member">Abhay Bhise</span>
+      <span class="team-member">Sneha Paliwal</span>
+      <span class="team-member">Namrata Paralkar</span>
+      <span class="team-member">Shivraj Chatap</span>
+    </div>
+    <a href="https://github.com/AbhayBhise/whatsync" class="footer-link">github.com/AbhayBhise/whatsync</a>
+  </div>
+</div>
+<script>
+const c=document.getElementById('c');
+const x=c.getContext('2d');
+c.width=window.innerWidth;c.height=window.innerHeight;
+const pts=Array.from({length:70},()=>({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.2+0.3,dx:(Math.random()-.5)*.25,dy:(Math.random()-.5)*.25,o:Math.random()*.18+.03}));
+(function loop(){x.clearRect(0,0,c.width,c.height);pts.forEach(p=>{p.x+=p.dx;p.y+=p.dy;if(p.x<0||p.x>c.width)p.dx*=-1;if(p.y<0||p.y>c.height)p.dy*=-1;x.beginPath();x.arc(p.x,p.y,p.r,0,Math.PI*2);x.fillStyle='rgba(255,255,255,'+p.o+')';x.fill();});requestAnimationFrame(loop);})();
+window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.innerHeight});
+</script>
+</body>
+</html>`);
+});
 
     expressApp.get("/slack/oauth_redirect", async (req, res) => {
         try {
