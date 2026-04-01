@@ -488,7 +488,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
 // ===============================
 // 🔹 SLACK FILE SHARE HANDLER
 // ===============================
-slackApp.event("message", async ({ event }) => {
+slackApp.event("message", async ({ event, context }) => {
     console.log("📨 Event received:", event.subtype, "thread:", event.thread_ts, "team:", event.team);
     if (event.subtype !== "file_share") return;
     if (event.bot_id) return;
@@ -497,11 +497,12 @@ slackApp.event("message", async ({ event }) => {
     // BROADCAST: main channel image → all WA users
     // ===============================
     if (!event.thread_ts) {
-        const teamId = event.team || event.user_team || event.authorizations?.[0]?.team_id;
+        const teamId = event.team || event.user_team || context.teamId;
         if (!teamId) {
-            console.log("❌ No teamId in file_share event:", JSON.stringify(event));
+            console.log("❌ No teamId in file_share event");
             return;
         }
+        console.log("📢 Broadcasting image, teamId:", teamId);
 
         const consented = await prisma.consent.findMany({
             where: { teamId, consentGiven: true }
