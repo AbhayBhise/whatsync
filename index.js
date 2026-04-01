@@ -686,7 +686,8 @@ if (!message.thread_ts) {
                     }
                     console.log("✅ Image broadcast Slack→all WA users");
                 } catch (err) {
-                    console.error("❌ Image broadcast error:", err.response?.data || err.message);
+                    console.error("❌ Image broadcast error:", JSON.stringify(err.response?.data) || err.message);
+                    console.error("❌ Image broadcast stack:", err.message);
                 }
             }
             return;
