@@ -489,6 +489,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
 // 🔹 SLACK FILE SHARE HANDLER
 // ===============================
 slackApp.event("message", async ({ event }) => {
+    console.log("📨 Event received:", event.subtype, "thread:", event.thread_ts, "team:", event.team);
     if (event.subtype !== "file_share") return;
     if (event.bot_id) return;
 
