@@ -1069,10 +1069,24 @@ if (text.trim().toLowerCase().startsWith("@all")) {
         const { WebClient } = require("@slack/web-api");
         const slackClient = new WebClient(botToken);
 
+        // Post in main channel
         await slackClient.chat.postMessage({
             channel: SLACK_CHANNEL,
             text: `📢 *${from} (WhatsApp):* ${broadcastMsg}`
         });
+
+        // Also post in their existing thread so replies work
+        const existingMapping = await prisma.mapping.findFirst({
+            where: { phoneNumber: hashPhone(from), teamId }
+        });
+
+        if (existingMapping) {
+            await slackClient.chat.postMessage({
+                channel: SLACK_CHANNEL,
+                text: `📢 *${from}:* ${broadcastMsg}`,
+                thread_ts: existingMapping.threadTs
+            });
+        }
 
         console.log("📢 Broadcast from WA:", maskPhone(from));
     }
