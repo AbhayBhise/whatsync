@@ -226,7 +226,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             return respond("Usage: /whatsapp1 invite 91XXXXXXXXXX");
         }
 
-        const BUSINESS_NUMBER = "15551855876";
+        const BUSINESS_NUMBER = process.env.WHATSAPP_BUSINESS_NUMBER;
 
         const waLink = `https://wa.me/${BUSINESS_NUMBER}?text=JOIN`;
 
@@ -613,6 +613,8 @@ slackApp.message(async ({ message }) => {
     // BROADCAST: main channel → all WA users
     // ===============================
     if (!message.thread_ts) {
+        if (message.bot_profile || message.bot_id) return;
+        if (!message.user) return;
         const teamId = message.team;
         if (!teamId) return;
 
@@ -621,6 +623,7 @@ slackApp.message(async ({ message }) => {
         });
 
         if (consented.length === 0) return;
+        if (!message.text) return;
 
         const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
         const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
@@ -636,6 +639,7 @@ slackApp.message(async ({ message }) => {
         const broadcastText = `📢 *${senderName}:* ${message.text}`;
 
         for (const consent of consented) {
+            await new Promise(r => setTimeout(r, 50));
             const mapping = await prisma.mapping.findFirst({
                 where: { phoneNumber: consent.phoneNumber, teamId }
             });
@@ -889,30 +893,13 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             res.status(500).send("Installation failed");
         }
     });
-    expressApp.get("/debug-env", (req, res) => {
-        res.json({
-            clientId: process.env.SLACK_CLIENT_ID,
-            clientIdLength: process.env.SLACK_CLIENT_ID?.length,
-            hasClientSecret: !!process.env.SLACK_CLIENT_SECRET,
-            appUrl: process.env.APP_URL
-        });
-    });
-    expressApp.get("/test-slack", async (req, res) => {
-        try {
-            await axios.post(process.env.SLACK_WEBHOOK_URL, {
-                text: "Webhook working"
-            });
-            res.send("Message sent to Slack");
-        } catch (err) {
-            console.error(err.message);
-            res.status(500).send("Error sending message");
-        }
-    });
+    
+    
 
     // WhatsApp webhook verify
 
     expressApp.get("/webhook", (req, res) => {
-        const verify_token = "verify_token";
+        const verify_token = process.env.WEBHOOK_VERIFY_TOKEN || "verify_token";
 
         const mode = req.query["hub.mode"];
         const token = req.query["hub.verify_token"];
