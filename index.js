@@ -631,7 +631,7 @@ slackApp.message(async ({ message }) => {
         try {
             const userInfo = await broadcastSlack.users.info({ user: message.user });
             senderName = userInfo.user?.real_name || userInfo.user?.name || "Team";
-        } catch (err) {}
+        } catch (err) { }
 
         const broadcastText = `📢 *${senderName}:* ${message.text}`;
 
@@ -1007,13 +1007,36 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 
 
                     // Step 4: Upload image to Slack using uploadV2
-                    await slackClient.files.uploadV2({
-                        channel_id: SLACK_CHANNEL,
-                        thread_ts: threadTs,
-                        initial_comment: `📱 ${from}${caption ? ": " + caption : " sent an image"}`,
-                        file: Buffer.from(imageBuffer.data),
-                        filename: "whatsapp-image.jpg"
-                    });
+                    // Check if caption starts with @all — broadcast image
+                    if (caption.trim().toLowerCase().startsWith("@all")) {
+                        const broadcastCaption = caption.trim().substring(4).trim();
+
+                        // Post image in main channel
+                        await slackClient.files.uploadV2({
+                            channel_id: SLACK_CHANNEL,
+                            initial_comment: `📢 *${from} (WhatsApp):* ${broadcastCaption || "sent an image"}`,
+                            file: Buffer.from(imageBuffer.data),
+                            filename: "whatsapp-image.jpg"
+                        });
+
+                        // Also post in thread for reply support
+                        await slackClient.files.uploadV2({
+                            channel_id: SLACK_CHANNEL,
+                            thread_ts: threadTs,
+                            initial_comment: `📢 *${from}:* ${broadcastCaption || "sent an image"}`,
+                            file: Buffer.from(imageBuffer.data),
+                            filename: "whatsapp-image.jpg"
+                        });
+                    } else {
+                        // Normal image → thread only
+                        await slackClient.files.uploadV2({
+                            channel_id: SLACK_CHANNEL,
+                            thread_ts: threadTs,
+                            initial_comment: `📱 ${from}${caption ? ": " + caption : " sent an image"}`,
+                            file: Buffer.from(imageBuffer.data),
+                            filename: "whatsapp-image.jpg"
+                        });
+                    }
 
                     console.log("✅ Image from WhatsApp posted to Slack thread");
                 } catch (err) {
@@ -1052,47 +1075,47 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             const text = message.text.body;
 
             // ===============================
-// 🔹 @all BROADCAST FROM WA
-// ===============================
-if (text.trim().toLowerCase().startsWith("@all")) {
-    const broadcastMsg = text.trim().substring(4).trim();
+            // 🔹 @all BROADCAST FROM WA
+            // ===============================
+            if (text.trim().toLowerCase().startsWith("@all")) {
+                const broadcastMsg = text.trim().substring(4).trim();
 
-    const consentRecord = await prisma.consent.findUnique({
-        where: { phoneNumber: hashPhone(from) }
-    });
+                const consentRecord = await prisma.consent.findUnique({
+                    where: { phoneNumber: hashPhone(from) }
+                });
 
-    if (consentRecord) {
-        const teamId = consentRecord.teamId;
-        const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
-        const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
-        const SLACK_CHANNEL = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
-        const { WebClient } = require("@slack/web-api");
-        const slackClient = new WebClient(botToken);
+                if (consentRecord) {
+                    const teamId = consentRecord.teamId;
+                    const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+                    const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+                    const SLACK_CHANNEL = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+                    const { WebClient } = require("@slack/web-api");
+                    const slackClient = new WebClient(botToken);
 
-        // Post in main channel
-        await slackClient.chat.postMessage({
-            channel: SLACK_CHANNEL,
-            text: `📢 *${from} (WhatsApp):* ${broadcastMsg}`
-        });
+                    // Post in main channel
+                    await slackClient.chat.postMessage({
+                        channel: SLACK_CHANNEL,
+                        text: `📢 *${from} (WhatsApp):* ${broadcastMsg}`
+                    });
 
-        // Also post in their existing thread so replies work
-        const existingMapping = await prisma.mapping.findFirst({
-            where: { phoneNumber: hashPhone(from), teamId }
-        });
+                    // Also post in their existing thread so replies work
+                    const existingMapping = await prisma.mapping.findFirst({
+                        where: { phoneNumber: hashPhone(from), teamId }
+                    });
 
-        if (existingMapping) {
-            await slackClient.chat.postMessage({
-                channel: SLACK_CHANNEL,
-                text: `📢 *${from}:* ${broadcastMsg}`,
-                thread_ts: existingMapping.threadTs
-            });
-        }
+                    if (existingMapping) {
+                        await slackClient.chat.postMessage({
+                            channel: SLACK_CHANNEL,
+                            text: `📢 *${from}:* ${broadcastMsg}`,
+                            thread_ts: existingMapping.threadTs
+                        });
+                    }
 
-        console.log("📢 Broadcast from WA:", maskPhone(from));
-    }
+                    console.log("📢 Broadcast from WA:", maskPhone(from));
+                }
 
-    return res.sendStatus(200);
-}
+                return res.sendStatus(200);
+            }
 
             // ===============================
             // 🔹 STOP / OPT-OUT DETECTION
