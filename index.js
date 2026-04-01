@@ -497,8 +497,11 @@ slackApp.event("message", async ({ event }) => {
     // BROADCAST: main channel image → all WA users
     // ===============================
     if (!event.thread_ts) {
-        const teamId = event.team || event.user_team;
-        if (!teamId) return;
+        const teamId = event.team || event.user_team || event.authorizations?.[0]?.team_id;
+        if (!teamId) {
+            console.log("❌ No teamId in file_share event:", JSON.stringify(event));
+            return;
+        }
 
         const consented = await prisma.consent.findMany({
             where: { teamId, consentGiven: true }
