@@ -608,6 +608,45 @@ slackApp.event("message", async ({ event }) => {
 // ===============================
 slackApp.message(async ({ message }) => {
     if (message.subtype || message.bot_id) return;
+
+    // ===============================
+    // BROADCAST: main channel → all WA users
+    // ===============================
+    if (!message.thread_ts) {
+        const teamId = message.team;
+        if (!teamId) return;
+
+        const consented = await prisma.consent.findMany({
+            where: { teamId, consentGiven: true }
+        });
+
+        if (consented.length === 0) return;
+
+        const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+        const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+        const { WebClient: BroadcastClient } = require("@slack/web-api");
+        const broadcastSlack = new BroadcastClient(botToken);
+
+        let senderName = "Team";
+        try {
+            const userInfo = await broadcastSlack.users.info({ user: message.user });
+            senderName = userInfo.user?.real_name || userInfo.user?.name || "Team";
+        } catch (err) {}
+
+        const broadcastText = `📢 *${senderName}:* ${message.text}`;
+
+        for (const consent of consented) {
+            const mapping = await prisma.mapping.findFirst({
+                where: { phoneNumber: consent.phoneNumber, teamId }
+            });
+            if (mapping?.sendTo) {
+                await sendWhatsAppMessage(mapping.sendTo, broadcastText);
+            }
+        }
+        return;
+    }
+
+    // existing thread logic continues below unchanged...
     if (!message.thread_ts) return;
 
     const threadTs = message.thread_ts.toString();
@@ -1011,6 +1050,35 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
             // 5. Normalize data
             const from = message.from?.toString().trim();
             const text = message.text.body;
+
+            // ===============================
+// 🔹 @all BROADCAST FROM WA
+// ===============================
+if (text.trim().toLowerCase().startsWith("@all")) {
+    const broadcastMsg = text.trim().substring(4).trim();
+
+    const consentRecord = await prisma.consent.findUnique({
+        where: { phoneNumber: hashPhone(from) }
+    });
+
+    if (consentRecord) {
+        const teamId = consentRecord.teamId;
+        const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+        const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+        const SLACK_CHANNEL = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+        const { WebClient } = require("@slack/web-api");
+        const slackClient = new WebClient(botToken);
+
+        await slackClient.chat.postMessage({
+            channel: SLACK_CHANNEL,
+            text: `📢 *${from} (WhatsApp):* ${broadcastMsg}`
+        });
+
+        console.log("📢 Broadcast from WA:", maskPhone(from));
+    }
+
+    return res.sendStatus(200);
+}
 
             // ===============================
             // 🔹 STOP / OPT-OUT DETECTION
