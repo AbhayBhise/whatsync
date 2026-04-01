@@ -490,8 +490,82 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
 // ===============================
 slackApp.event("message", async ({ event }) => {
     if (event.subtype !== "file_share") return;
-    if (!event.thread_ts) return;
     if (event.bot_id) return;
+
+    // ===============================
+    // BROADCAST: main channel image → all WA users
+    // ===============================
+    if (!event.thread_ts) {
+        const teamId = event.team || event.user_team;
+        if (!teamId) return;
+
+        const consented = await prisma.consent.findMany({
+            where: { teamId, consentGiven: true }
+        });
+        if (consented.length === 0) return;
+
+        const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+        const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+        const { WebClient: BCast } = require("@slack/web-api");
+        const broadcastSlack = new BCast(botToken);
+
+        let senderName = "Team";
+        try {
+            const userInfo = await broadcastSlack.users.info({ user: event.user });
+            senderName = userInfo.user?.real_name || userInfo.user?.name || "Team";
+        } catch (err) {}
+
+        for (const file of (event.files || [])) {
+            if (!file.mimetype?.startsWith("image/")) continue;
+            try {
+                const imageRes = await axios.get(file.url_private, {
+                    responseType: "arraybuffer",
+                    headers: { Authorization: `Bearer ${botToken}` },
+                    httpsAgent: new https.Agent({ family: 4 })
+                });
+
+                const form = new FormData();
+                form.append("file", Buffer.from(imageRes.data), {
+                    filename: file.name || "image.jpg",
+                    contentType: file.mimetype
+                });
+                form.append("type", file.mimetype);
+                form.append("messaging_product", "whatsapp");
+
+                const uploadRes = await axios.post(
+                    `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/media`,
+                    form,
+                    { headers: { ...form.getHeaders(), Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` } }
+                );
+
+                const mediaId = uploadRes.data.id;
+                const caption = event.text ? `📢 ${senderName}: ${event.text}` : `📢 ${senderName} sent an image`;
+
+                for (const consent of consented) {
+                    await new Promise(r => setTimeout(r, 50));
+                    const mapping = await prisma.mapping.findFirst({
+                        where: { phoneNumber: consent.phoneNumber, teamId }
+                    });
+                    if (mapping?.sendTo) {
+                        await axios.post(
+                            `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
+                            {
+                                messaging_product: "whatsapp",
+                                to: mapping.sendTo,
+                                type: "image",
+                                image: { id: mediaId, caption }
+                            },
+                            { headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
+                        );
+                        console.log("✅ Image broadcast to:", maskPhone(mapping.sendTo));
+                    }
+                }
+            } catch (err) {
+                console.error("❌ Image broadcast error:", err.response?.data || err.message);
+            }
+        }
+        return;
+    }
 
     console.log("📎 File share event received:", JSON.stringify({
         files: event.files?.map(f => ({ name: f.name, mimetype: f.mimetype })),
