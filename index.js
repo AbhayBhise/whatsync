@@ -1114,9 +1114,33 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                 });
 
                 if (existingConsent) {
-                    await prisma.consent.delete({ where: { phoneNumber: hashPhone(from) } });
-                    await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(from) } });
-                    await prisma.pendingConnection.deleteMany({ where: { phoneNumber: hashPhone(from) } });
+    // Send WA confirmation BEFORE deleting data
+    try {
+        await axios.post(
+            `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
+            {
+                messaging_product: "whatsapp",
+                to: from,
+                type: "text",
+                text: {
+                    body: `✅ You have been successfully unsubscribed.\n\nYou will no longer receive messages from this Slack team.\n\nIf you'd like to reconnect in the future, ask the team to invite you again.`
+                }
+            },
+            {
+                headers: {
+                    Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+    } catch (err) {
+        console.error("❌ Opt-out WA confirmation failed:", err.message);
+    }
+
+    // NOW delete all data
+    await prisma.consent.delete({ where: { phoneNumber: hashPhone(from) } });
+    await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(from) } });
+    await prisma.pendingConnection.deleteMany({ where: { phoneNumber: hashPhone(from) } });
                     // Notify Slack thread
                     const teamId = existingConsent.teamId || "default_workspace";
                     const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
