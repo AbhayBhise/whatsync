@@ -2,7 +2,8 @@ require("./instrument.js");
 const dns = require("dns");
 const crypto = require("crypto");
 dns.setDefaultResultOrder("ipv4first");
-
+const FormData = require("form-data");
+const https = require("https");
 require("https").globalAgent.options.family = 4;
 
 const express = require("express");
@@ -524,7 +525,7 @@ slackApp.event("message", async ({ event }) => {
             const botToken = wsInstallForDownload?.botToken || process.env.SLACK_BOT_TOKEN;
 
             // Step 1: Download from Slack (axios follows redirects; Slack url_private redirects to CDN)
-            const https = require("https");
+           
             const imageRes = await axios.get(file.url_private, {
                 responseType: "arraybuffer",
                 headers: { Authorization: `Bearer ${botToken}` },
@@ -532,7 +533,7 @@ slackApp.event("message", async ({ event }) => {
             });
 
             // Step 2: Upload to Meta
-            const FormData = require("form-data");
+            // const FormData = require("form-data");
             const form = new FormData();
             form.append("file", Buffer.from(imageRes.data), {
                 filename: file.name || "image.jpg",
@@ -612,7 +613,7 @@ slackApp.message(async ({ message }) => {
     // ===============================
     // BROADCAST: main channel → all WA users
     // ===============================
-    if (!message.thread_ts) {
+if (!message.thread_ts) {
         if (message.bot_profile || message.bot_id) return;
         if (!message.user) return;
         const teamId = message.team;
@@ -623,7 +624,6 @@ slackApp.message(async ({ message }) => {
         });
 
         if (consented.length === 0) return;
-        if (!message.text) return;
 
         const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
         const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
@@ -634,8 +634,66 @@ slackApp.message(async ({ message }) => {
         try {
             const userInfo = await broadcastSlack.users.info({ user: message.user });
             senderName = userInfo.user?.real_name || userInfo.user?.name || "Team";
-        } catch (err) { }
+        } catch (err) {}
 
+        // Handle image broadcast
+        if (message.files && message.files.length > 0) {
+            for (const file of message.files) {
+                if (!file.mimetype?.startsWith("image/")) continue;
+                try {
+                    
+                    const imageRes = await axios.get(file.url_private, {
+                        responseType: "arraybuffer",
+                        headers: { Authorization: `Bearer ${botToken}` },
+                        httpsAgent: new https.Agent({ family: 4 })
+                    });
+
+                    // const FormData = require("form-data");
+                    const form = new FormData();
+                    form.append("file", Buffer.from(imageRes.data), {
+                        filename: file.name || "image.jpg",
+                        contentType: file.mimetype
+                    });
+                    form.append("type", file.mimetype);
+                    form.append("messaging_product", "whatsapp");
+
+                    const uploadRes = await axios.post(
+                        `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/media`,
+                        form,
+                        { headers: { ...form.getHeaders(), Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` } }
+                    );
+
+                    const mediaId = uploadRes.data.id;
+                    const caption = message.text ? `📢 ${senderName}: ${message.text}` : `📢 ${senderName} sent an image`;
+
+                    for (const consent of consented) {
+                        await new Promise(r => setTimeout(r, 50));
+                        const mapping = await prisma.mapping.findFirst({
+                            where: { phoneNumber: consent.phoneNumber, teamId }
+                        });
+                        if (mapping?.sendTo) {
+                            await axios.post(
+                                `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
+                                {
+                                    messaging_product: "whatsapp",
+                                    to: mapping.sendTo,
+                                    type: "image",
+                                    image: { id: mediaId, caption }
+                                },
+                                { headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
+                            );
+                        }
+                    }
+                    console.log("✅ Image broadcast Slack→all WA users");
+                } catch (err) {
+                    console.error("❌ Image broadcast error:", err.response?.data || err.message);
+                }
+            }
+            return;
+        }
+
+        // Text broadcast
+        if (!message.text) return;
         const broadcastText = `📢 *${senderName}:* ${message.text}`;
 
         for (const consent of consented) {
@@ -651,7 +709,7 @@ slackApp.message(async ({ message }) => {
     }
 
     // existing thread logic continues below unchanged...
-    if (!message.thread_ts) return;
+   
 
     const threadTs = message.thread_ts.toString();
     const teamId = message.team;
@@ -685,7 +743,7 @@ slackApp.message(async ({ message }) => {
                 const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
 
                 // Step 1: Download image from Slack (axios follows redirects to CDN)
-                const https = require("https");
+                
                 const imageRes = await axios.get(file.url_private, {
                     responseType: "arraybuffer",
                     headers: { Authorization: `Bearer ${botToken}` },
@@ -693,7 +751,7 @@ slackApp.message(async ({ message }) => {
                 });
 
                 // Step 2: Upload to Meta media endpoint
-                const FormData = require("form-data");
+                // const FormData = require("form-data");
                 const form = new FormData();
                 form.append("file", Buffer.from(imageRes.data), {
                     filename: file.name || "image.jpg",
@@ -1114,6 +1172,11 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                 });
 
                 if (existingConsent) {
+                    // Get mapping BEFORE deleting (needed for thread notification)
+    const teamIdForOptout = existingConsent.teamId || "default_workspace";
+    const mappingBeforeDelete = await prisma.mapping.findFirst({
+        where: { phoneNumber: hashPhone(from), teamId: teamIdForOptout }
+    });
     // Send WA confirmation BEFORE deleting data
     try {
         await axios.post(
@@ -1149,13 +1212,9 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
                     const { WebClient } = require("@slack/web-api");
                     const slackClient = new WebClient(botToken);
 
-                    const existingMapping = await prisma.mapping.findFirst({
-                        where: { phoneNumber: hashPhone(from), teamId }
-                    });
-
                     await slackClient.chat.postMessage({
                         channel: SLACK_CHANNEL,
-                        thread_ts: existingMapping?.threadTs,
+                        thread_ts: mappingBeforeDelete?.threadTs,
                         text: `🔴 *${from} has opted out.* They sent "${text.trim()}". No further messages will be delivered to or from this number.`
                     });
 
