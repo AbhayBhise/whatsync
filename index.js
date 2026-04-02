@@ -1004,9 +1004,15 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
     console.log("⚡ Slack Bolt running on port 3000");
     
     const expressApp = receiver.app;
-    expressApp.get("/debug-sentry", (req, res) => {
+    // AFTER
+expressApp.get("/debug-sentry", (req, res) => {
+    try {
         throw new Error("Sentry test error from Whatsync Bridge!");
-    });
+    } catch (err) {
+        Sentry.captureException(err);
+        setTimeout(() => res.status(500).send("Error sent to Sentry!"), 500);
+    }
+});
     // Attach ONLY your routes (not whole app)
     expressApp.get("/", (req, res) => {
         const clientId = process.env.SLACK_CLIENT_ID;
@@ -1878,7 +1884,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
             res.sendStatus(200);
 
+        // AFTER
         } catch (err) {
+            Sentry.captureException(err);
             console.error("Webhook error:", err.message);
             res.sendStatus(500);
         }
