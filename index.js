@@ -1005,9 +1005,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
     console.log("⚡ Slack Bolt running on port 3000");
     
     const expressApp = receiver.app;
-   expressApp.get("/debug-sentry", (req, res) => {
-        throw new Error("Sentry test error from Whatsync Bridge!");
-    });
+   
 
     // Attach ONLY your routes (not whole app)
     expressApp.get("/", (req, res) => {
