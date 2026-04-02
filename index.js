@@ -1,4 +1,5 @@
 require("./instrument.js");
+const Sentry = require("@sentry/node");
 const dns = require("dns");
 const crypto = require("crypto");
 dns.setDefaultResultOrder("ipv4first");
@@ -1001,7 +1002,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 (async () => {
     await receiver.app.listen(3000);
     console.log("⚡ Slack Bolt running on port 3000");
-
+    Sentry.setupExpressErrorHandler(receiver.app);
     const expressApp = receiver.app;
     expressApp.get("/debug-sentry", (req, res) => {
         throw new Error("Sentry test error from Whatsync Bridge!");
