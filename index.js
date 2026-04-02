@@ -380,7 +380,36 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             text: `📋 *Audit log for ${number} (${logs.length} events):*\n${lines.join("\n")}`
         });
     }
+// ===============================
+// OPEN: /whatsapp1 open <number>
+// ===============================
+if (subcommand === "open") {
+    const number = parts[1];
 
+    if (!number || !/^\d{10,15}$/.test(number)) {
+        return respond("Usage: /whatsapp1 open 91XXXXXXXXXX");
+    }
+
+    const teamId = command.team_id;
+    const mapping = await prisma.mapping.findFirst({
+        where: { phoneNumber: hashPhone(number), teamId }
+    });
+
+    if (!mapping) {
+        return respond({
+            response_type: "ephemeral",
+            text: `⚠️ No thread found for ${number}. They may not have joined yet.`
+        });
+    }
+
+    const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+    const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+
+    return respond({
+        response_type: "ephemeral",
+        text: `🧵 Jump to ${number}'s thread:\nhttps://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`
+    });
+}
     // ===============================
     // PING: /whatsapp1 ping <number>
     // ===============================
