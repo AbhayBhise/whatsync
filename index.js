@@ -74,6 +74,7 @@ const slackApp = new App({
     token: process.env.SLACK_BOT_TOKEN,
     receiver
 });
+receiver.app.set("trust proxy", 1);
 receiver.app.use(express.json());
 receiver.app.use(express.urlencoded({ extended: true }));
 
@@ -257,17 +258,16 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
 
         const teamId = command.team_id;
 
-        const consent = await prisma.consent.findUnique({
-            where: { phoneNumber: hashPhone(number) }
+        const consent = await prisma.consent.findFirst({
+            where: { phoneNumber: hashPhone(number), teamId }
         });
 
         if (!consent) {
             return respond({
                 response_type: "ephemeral",
-                text: `⚠️ ${number} is not connected.`
+                text: `⚠️ ${number} is not connected to this workspace.`
             });
         }
-
         // Notify WhatsApp user before deleting data
         try {
             await axios.post(
@@ -359,8 +359,9 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             return respond("Usage: /whatsapp1 audit 91XXXXXXXXXX");
         }
 
+        const teamId = command.team_id;
         const logs = await prisma.auditLog.findMany({
-            where: { phoneHash: hashPhone(number) },
+            where: { phoneHash: hashPhone(number), teamId },
             orderBy: { createdAt: "asc" }
         });
 
@@ -1004,7 +1005,9 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
     console.log("⚡ Slack Bolt running on port 3000");
     
     const expressApp = receiver.app;
-   
+   expressApp.get("/debug-sentry", (req, res) => {
+        throw new Error("Sentry test error from Whatsync Bridge!");
+    });
 
     // Attach ONLY your routes (not whole app)
     expressApp.get("/", (req, res) => {
