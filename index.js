@@ -380,36 +380,36 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
             text: `📋 *Audit log for ${number} (${logs.length} events):*\n${lines.join("\n")}`
         });
     }
-// ===============================
-// OPEN: /whatsapp1 open <number>
-// ===============================
-if (subcommand === "open") {
-    const number = parts[1];
+    // ===============================
+    // OPEN: /whatsapp1 open <number>
+    // ===============================
+    if (subcommand === "open") {
+        const number = parts[1];
 
-    if (!number || !/^\d{10,15}$/.test(number)) {
-        return respond("Usage: /whatsapp1 open 91XXXXXXXXXX");
-    }
+        if (!number || !/^\d{10,15}$/.test(number)) {
+            return respond("Usage: /whatsapp1 open 91XXXXXXXXXX");
+        }
 
-    const teamId = command.team_id;
-    const mapping = await prisma.mapping.findFirst({
-        where: { phoneNumber: hashPhone(number), teamId }
-    });
+        const teamId = command.team_id;
+        const mapping = await prisma.mapping.findFirst({
+            where: { phoneNumber: hashPhone(number), teamId }
+        });
 
-    if (!mapping) {
+        if (!mapping) {
+            return respond({
+                response_type: "ephemeral",
+                text: `⚠️ No thread found for ${number}. They may not have joined yet.`
+            });
+        }
+
+        const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+        const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+
         return respond({
             response_type: "ephemeral",
-            text: `⚠️ No thread found for ${number}. They may not have joined yet.`
+            text: `🧵 Jump to ${number}'s thread:\nhttps://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`
         });
     }
-
-    const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
-    const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
-
-    return respond({
-        response_type: "ephemeral",
-        text: `🧵 Jump to ${number}'s thread:\nhttps://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`
-    });
-}
     // ===============================
     // PING: /whatsapp1 ping <number>
     // ===============================
@@ -555,7 +555,7 @@ slackApp.event("message", async ({ event, context }) => {
         try {
             const userInfo = await broadcastSlack.users.info({ user: event.user });
             senderName = userInfo.user?.real_name || userInfo.user?.name || "Team";
-        } catch (err) {}
+        } catch (err) { }
 
         for (const file of (event.files || [])) {
             if (!file.mimetype?.startsWith("image/")) continue;
@@ -641,7 +641,7 @@ slackApp.event("message", async ({ event, context }) => {
             const botToken = wsInstallForDownload?.botToken || process.env.SLACK_BOT_TOKEN;
 
             // Step 1: Download from Slack (axios follows redirects; Slack url_private redirects to CDN)
-           
+
             const imageRes = await axios.get(file.url_private, {
                 responseType: "arraybuffer",
                 headers: { Authorization: `Bearer ${botToken}` },
@@ -729,7 +729,7 @@ slackApp.message(async ({ message }) => {
     // ===============================
     // BROADCAST: main channel → all WA users
     // ===============================
-if (!message.thread_ts) {
+    if (!message.thread_ts) {
         if (message.bot_profile || message.bot_id) return;
         if (!message.user) return;
         const teamId = message.team;
@@ -750,14 +750,14 @@ if (!message.thread_ts) {
         try {
             const userInfo = await broadcastSlack.users.info({ user: message.user });
             senderName = userInfo.user?.real_name || userInfo.user?.name || "Team";
-        } catch (err) {}
+        } catch (err) { }
 
         // Handle image broadcast
         if (message.files && message.files.length > 0) {
             for (const file of message.files) {
                 if (!file.mimetype?.startsWith("image/")) continue;
                 try {
-                    
+
                     const imageRes = await axios.get(file.url_private, {
                         responseType: "arraybuffer",
                         headers: { Authorization: `Bearer ${botToken}` },
@@ -826,7 +826,7 @@ if (!message.thread_ts) {
     }
 
     // existing thread logic continues below unchanged...
-   
+
 
     const threadTs = message.thread_ts.toString();
     const teamId = message.team;
@@ -860,7 +860,7 @@ if (!message.thread_ts) {
                 const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
 
                 // Step 1: Download image from Slack (axios follows redirects to CDN)
-                
+
                 const imageRes = await axios.get(file.url_private, {
                     responseType: "arraybuffer",
                     headers: { Authorization: `Bearer ${botToken}` },
@@ -1005,10 +1005,10 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
     const expressApp = receiver.app;
     // Attach ONLY your routes (not whole app)
     expressApp.get("/", (req, res) => {
-    const clientId = process.env.SLACK_CLIENT_ID;
-    const appUrl = process.env.APP_URL;
-    const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=channels:history,chat:write,commands,files:read,files:write,channels:read,incoming-webhook&redirect_uri=${appUrl}/slack/oauth_redirect`;
-    res.send(`<!DOCTYPE html>
+        const clientId = process.env.SLACK_CLIENT_ID;
+        const appUrl = process.env.APP_URL;
+        const oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${clientId}&scope=channels:history,chat:write,commands,files:read,files:write,channels:read,incoming-webhook&redirect_uri=${appUrl}/slack/oauth_redirect`;
+        res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -1167,7 +1167,7 @@ window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.
 </script>
 </body>
 </html>`);
-});
+    });
 
     expressApp.get("/slack/oauth_redirect", async (req, res) => {
         try {
@@ -1207,19 +1207,258 @@ window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.
             // Send instructions to install channel
 
             console.log("✅ OAuth install complete for:", data.team.name);
-            res.send(`
-            <html><body style="font-family:sans-serif;text-align:center;padding:50px">
-            <h1>✅ Whatsync installed!</h1>
-            <p>Go back to Slack and use <b>/whatsapp1</b> in any channel.</p>
-            </body></html>
-        `);
+            res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Whatsync Bridge — Successfully Installed!</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0a0f;color:#fff;overflow-x:hidden}
+.orb{position:fixed;border-radius:50%;filter:blur(90px);opacity:0.1;animation:float 9s ease-in-out infinite;pointer-events:none;z-index:0}
+.orb1{width:500px;height:500px;background:#4A154B;top:-100px;left:-100px}
+.orb2{width:400px;height:400px;background:#25D366;bottom:0;right:-100px;animation-delay:4s}
+.grid{position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.02) 1px,transparent 1px);background-size:60px 60px;pointer-events:none}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
+.wrap{position:relative;z-index:10;max-width:900px;margin:0 auto;padding:50px 24px}
+
+/* SUCCESS BANNER */
+.success-banner{text-align:center;margin-bottom:48px;animation:up 0.6s ease both}
+.check-circle{width:72px;height:72px;border-radius:50%;background:rgba(37,211,102,0.15);border:2px solid rgba(37,211,102,0.3);display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 20px;animation:pop 0.5s cubic-bezier(0.175,0.885,0.32,1.275) both}
+@keyframes pop{from{transform:scale(0)}to{transform:scale(1)}}
+.success-banner h1{font-size:clamp(28px,5vw,48px);font-weight:800;margin-bottom:12px}
+.gt{background:linear-gradient(135deg,#8B2FC9,#25D366);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.success-banner p{font-size:16px;color:rgba(255,255,255,0.45);max-width:460px;margin:0 auto 28px;line-height:1.6}
+.next-step{display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:12px;padding:14px 24px;font-size:14px;color:rgba(255,255,255,0.7)}
+.step-num{width:24px;height:24px;border-radius:50%;background:#4A154B;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.cmd-pill{background:rgba(74,21,75,0.4);border:1px solid rgba(139,47,201,0.3);border-radius:6px;padding:2px 8px;font-family:monospace;font-size:13px;color:#c98de8}
+
+/* SECTION */
+.sec-label{text-align:center;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(255,255,255,0.2);margin:48px 0 20px}
+
+/* INDUSTRY NEED */
+.problem-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:48px}
+.problem-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:18px;animation:up 0.6s ease both}
+.problem-card:nth-child(1){animation-delay:0.1s}.problem-card:nth-child(2){animation-delay:0.2s}
+.problem-card:nth-child(3){animation-delay:0.3s}.problem-card:nth-child(4){animation-delay:0.4s}
+.tag{display:inline-block;font-size:10px;padding:3px 10px;border-radius:100px;margin-bottom:10px;font-weight:600}
+.tag.bad{background:rgba(220,50,50,0.15);color:#f87171;border:1px solid rgba(220,50,50,0.2)}
+.tag.good{background:rgba(37,211,102,0.12);color:#6ef4a0;border:1px solid rgba(37,211,102,0.2)}
+.problem-card h3{font-size:13px;font-weight:600;margin-bottom:6px}
+.problem-card p{font-size:11.5px;color:rgba(255,255,255,0.38);line-height:1.55}
+
+/* COMMANDS */
+.commands{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:48px}
+.cmd-card{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:13px;padding:16px;display:flex;gap:12px;align-items:flex-start;animation:up 0.6s ease both}
+.cmd-card:nth-child(1){animation-delay:0.1s}.cmd-card:nth-child(2){animation-delay:0.2s}
+.cmd-card:nth-child(3){animation-delay:0.3s}.cmd-card:nth-child(4){animation-delay:0.4s}
+.cmd-card:nth-child(5){animation-delay:0.5s}.cmd-card:nth-child(6){animation-delay:0.6s}
+.cmd-card:nth-child(7){animation-delay:0.7s}
+.cmd-ico{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.cmd-card h3{font-size:11.5px;font-family:monospace;color:#c98de8;margin-bottom:4px}
+.cmd-card p{font-size:11px;color:rgba(255,255,255,0.35);line-height:1.5}
+
+/* BENEFITS */
+.benefits{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:48px}
+.benefit{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:13px;padding:16px;text-align:center;animation:up 0.6s ease both}
+.benefit:nth-child(1){animation-delay:0.1s}.benefit:nth-child(2){animation-delay:0.2s}.benefit:nth-child(3){animation-delay:0.3s}
+.benefit:nth-child(4){animation-delay:0.4s}.benefit:nth-child(5){animation-delay:0.5s}.benefit:nth-child(6){animation-delay:0.6s}
+.benefit-ico{font-size:24px;margin-bottom:10px}
+.benefit h3{font-size:12.5px;font-weight:600;margin-bottom:5px}
+.benefit p{font-size:11px;color:rgba(255,255,255,0.32);line-height:1.5}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:48px}
+.stat{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:13px;padding:16px;text-align:center;animation:up 0.6s ease both}
+.stat-num{font-size:28px;font-weight:800;margin-bottom:4px}
+.stat-label{font-size:11px;color:rgba(255,255,255,0.35)}
+
+/* FOOTER */
+.footer{text-align:center;padding-top:28px;border-top:1px solid rgba(255,255,255,0.06)}
+.footer p{font-size:12px;color:rgba(255,255,255,0.2);margin-bottom:8px}
+.team{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin-bottom:12px}
+.tm{font-size:11px;color:rgba(255,255,255,0.28);background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:100px;padding:4px 12px}
+.footer a{color:rgba(255,255,255,0.22);font-size:11px;text-decoration:none}
+
+@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:640px){.problem-grid,.commands,.benefits,.stats{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="orb orb1"></div>
+<div class="orb orb2"></div>
+<div class="grid"></div>
+
+<div class="wrap">
+
+  <!-- SUCCESS -->
+  <div class="success-banner">
+    <div class="check-circle">✅</div>
+    <h1>Whatsync Bridge<br><span class="gt">Successfully Installed!</span></h1>
+    <p>Your Slack workspace is now connected to the Whatsync Bridge. You're one command away from bridging your team with WhatsApp.</p>
+    <div class="next-step">
+      <div class="step-num">1</div>
+      Go to Slack &rarr; your channel &rarr; type &nbsp;<span class="cmd-pill">/whatsapp1 setchannel</span>&nbsp; then &nbsp;<span class="cmd-pill">/whatsapp1 918XXXXXXXXXX</span>
+    </div>
+  </div>
+
+  <!-- INDUSTRY NEED -->
+  <p class="sec-label">Why this exists</p>
+  <div class="problem-grid">
+    <div class="problem-card">
+      <div class="tag bad">Before Whatsync</div>
+      <h3>Manual forwarding nightmare</h3>
+      <p>Teams copy-paste WhatsApp messages into Slack manually. Context gets lost. Messages get missed. Hours wasted every week.</p>
+    </div>
+    <div class="problem-card">
+      <div class="tag good">After Whatsync</div>
+      <h3>Zero-effort real-time bridge</h3>
+      <p>Every WhatsApp message appears instantly in Slack. Replies go back automatically. Zero manual work. Zero missed messages.</p>
+    </div>
+    <div class="problem-card">
+      <div class="tag bad">Before Whatsync</div>
+      <h3>Announcements sent one by one</h3>
+      <p>Sending updates to 20 WhatsApp contacts means 20 individual messages. Time-consuming, error-prone, impossible to scale.</p>
+    </div>
+    <div class="problem-card">
+      <div class="tag good">After Whatsync</div>
+      <h3>Broadcast to everyone instantly</h3>
+      <p>Type once in your Slack channel &mdash; every connected WhatsApp user receives it in seconds. One message, unlimited reach.</p>
+    </div>
+  </div>
+
+  <!-- COMMANDS -->
+  <p class="sec-label">All commands at your fingertips</p>
+  <div class="commands">
+    <div class="cmd-card">
+      <div class="cmd-ico" style="background:rgba(74,21,75,0.2)">&#128247;</div>
+      <div>
+        <h3>/whatsapp1 &lt;number&gt;</h3>
+        <p>Onboard a new WhatsApp contact. Generates a secure QR code + link with 24hr expiry. They scan &rarr; bridge is live.</p>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-ico" style="background:rgba(37,211,102,0.12)">&#128203;</div>
+      <div>
+        <h3>/whatsapp1 list</h3>
+        <p>View all connected WhatsApp users in your workspace. Phone numbers shown as privacy-safe hashes &mdash; zero PII exposed.</p>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-ico" style="background:rgba(233,30,99,0.12)">&#128680;</div>
+      <div>
+        <h3>/whatsapp1 remove &lt;number&gt;</h3>
+        <p>Disconnect a user. Notifies them on WhatsApp, deletes all their data immediately. Full GDPR right to erasure.</p>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-ico" style="background:rgba(255,193,7,0.12)">&#128276;</div>
+      <div>
+        <h3>/whatsapp1 ping &lt;number&gt;</h3>
+        <p>Re-initiate an expired WhatsApp session. Sends a nudge to the user asking them to message first and reopen the 24hr window.</p>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-ico" style="background:rgba(21,101,192,0.2)">&#128196;</div>
+      <div>
+        <h3>/whatsapp1 audit &lt;number&gt;</h3>
+        <p>View the full GDPR event history for any number &mdash; joins, pings, messages, opt-outs, removals. Tamper-proof log.</p>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-ico" style="background:rgba(156,39,176,0.15)">&#128279;</div>
+      <div>
+        <h3>/whatsapp1 open &lt;number&gt;</h3>
+        <p>Jump directly to any user's Slack thread. No scrolling, no searching &mdash; instant navigation to the right conversation.</p>
+      </div>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-ico" style="background:rgba(37,211,102,0.12)">&#128226;</div>
+      <div>
+        <h3>Channel broadcast</h3>
+        <p>Type any message in your Slack channel (not in a thread) &mdash; ALL connected WhatsApp users receive it instantly with your name.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <p class="sec-label">Built for scale</p>
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-num" style="color:#c98de8">&#8734;</div>
+      <div class="stat-label">WhatsApp users<br>per workspace</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="color:#6ef4a0">&lt;1s</div>
+      <div class="stat-label">Message delivery<br>latency</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="color:#90c8f8">100%</div>
+      <div class="stat-label">GDPR<br>compliant</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="color:#fbbf24">EU</div>
+      <div class="stat-label">Data residency<br>Frankfurt + Amsterdam</div>
+    </div>
+  </div>
+
+  <!-- BENEFITS -->
+  <p class="sec-label">Why teams love it</p>
+  <div class="benefits">
+    <div class="benefit">
+      <div class="benefit-ico">&#9889;</div>
+      <h3>Zero context switching</h3>
+      <p>Your team stays in Slack. WhatsApp contacts stay in WhatsApp. Everyone works where they're comfortable.</p>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">&#128274;</div>
+      <h3>Enterprise security</h3>
+      <p>Phone numbers hashed with sha256. Explicit consent required. Full audit trail. EU data residency.</p>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">&#128226;</div>
+      <h3>One-to-many broadcast</h3>
+      <p>Announce to all WhatsApp contacts with one Slack message. Scale your outreach instantly.</p>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">&#128200;</div>
+      <h3>Full conversation history</h3>
+      <p>Every message archived in Slack threads. Searchable. Organized. Never lose a conversation.</p>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">&#128101;</div>
+      <h3>Multi-workspace ready</h3>
+      <p>Each department or team gets their own isolated workspace with their own contacts and channels.</p>
+    </div>
+    <div class="benefit">
+      <div class="benefit-ico">&#128640;</div>
+      <h3>Production deployed</h3>
+      <p>Live on EU infrastructure. Auto CI/CD. Sentry monitoring. UptimeRobot. Built to stay online.</p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Whatsync Bridge &middot; Neobim Hackathon 2026 &middot; Team WhatSync A</p>
+    <div class="team">
+      <span class="tm">Abhay Bhise</span>
+      <span class="tm">Sneha Paliwal</span>
+      <span class="tm">Namrata Paralkar</span>
+      <span class="tm">Shivraj Chatap</span>
+    </div>
+    <a href="https://github.com/AbhayBhise/whatsync">github.com/AbhayBhise/whatsync</a>
+  </div>
+
+</div>
+</body>
+</html>`);
         } catch (err) {
             console.error("OAuth redirect error:", err.message);
             res.status(500).send("Installation failed");
         }
     });
-    
-    
+
+
 
     // WhatsApp webhook verify
 
@@ -1440,37 +1679,37 @@ window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.
 
                 if (existingConsent) {
                     // Get mapping BEFORE deleting (needed for thread notification)
-    const teamIdForOptout = existingConsent.teamId || "default_workspace";
-    const mappingBeforeDelete = await prisma.mapping.findFirst({
-        where: { phoneNumber: hashPhone(from), teamId: teamIdForOptout }
-    });
-    // Send WA confirmation BEFORE deleting data
-    try {
-        await axios.post(
-            `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
-            {
-                messaging_product: "whatsapp",
-                to: from,
-                type: "text",
-                text: {
-                    body: `✅ You have been successfully unsubscribed.\n\nYou will no longer receive messages from this Slack team.\n\nIf you'd like to reconnect in the future, ask the team to invite you again.`
-                }
-            },
-            {
-                headers: {
-                    Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
-                    "Content-Type": "application/json"
-                }
-            }
-        );
-    } catch (err) {
-        console.error("❌ Opt-out WA confirmation failed:", err.message);
-    }
+                    const teamIdForOptout = existingConsent.teamId || "default_workspace";
+                    const mappingBeforeDelete = await prisma.mapping.findFirst({
+                        where: { phoneNumber: hashPhone(from), teamId: teamIdForOptout }
+                    });
+                    // Send WA confirmation BEFORE deleting data
+                    try {
+                        await axios.post(
+                            `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
+                            {
+                                messaging_product: "whatsapp",
+                                to: from,
+                                type: "text",
+                                text: {
+                                    body: `✅ You have been successfully unsubscribed.\n\nYou will no longer receive messages from this Slack team.\n\nIf you'd like to reconnect in the future, ask the team to invite you again.`
+                                }
+                            },
+                            {
+                                headers: {
+                                    Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+                                    "Content-Type": "application/json"
+                                }
+                            }
+                        );
+                    } catch (err) {
+                        console.error("❌ Opt-out WA confirmation failed:", err.message);
+                    }
 
-    // NOW delete all data
-    await prisma.consent.delete({ where: { phoneNumber: hashPhone(from) } });
-    await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(from) } });
-    await prisma.pendingConnection.deleteMany({ where: { phoneNumber: hashPhone(from) } });
+                    // NOW delete all data
+                    await prisma.consent.delete({ where: { phoneNumber: hashPhone(from) } });
+                    await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(from) } });
+                    await prisma.pendingConnection.deleteMany({ where: { phoneNumber: hashPhone(from) } });
                     // Notify Slack thread
                     const teamId = existingConsent.teamId || "default_workspace";
                     const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
