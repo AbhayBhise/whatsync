@@ -422,8 +422,8 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         }
 
         // Check consent exists
-        const consent = await prisma.consent.findUnique({
-            where: { phoneNumber: hashPhone(number) }
+        const consent = await prisma.consent.findFirst({
+            where: { phoneNumber: hashPhone(number), teamId: command.team_id }
         });
 
         if (!consent) {
