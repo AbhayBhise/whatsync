@@ -1002,7 +1002,7 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 (async () => {
     await receiver.app.listen(3000);
     console.log("⚡ Slack Bolt running on port 3000");
-    Sentry.setupExpressErrorHandler(receiver.app);
+    
     const expressApp = receiver.app;
     expressApp.get("/debug-sentry", (req, res) => {
         throw new Error("Sentry test error from Whatsync Bridge!");
@@ -1883,4 +1883,5 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             res.sendStatus(500);
         }
     });
+    Sentry.setupExpressErrorHandler(expressApp);
 })();
