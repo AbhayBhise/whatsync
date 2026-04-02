@@ -517,6 +517,7 @@ if (subcommand === "open") {
         "• `/whatsapp1 reply <message>` — reply from a thread\n" +
         "• `/whatsapp1 ping <number>` — nudge a WhatsApp user to start conversation\n" +
         "• `/whatsapp1 audit <number>` — view full audit history for a number\n" +
+        "• `/whatsapp1 open <number>` — jump to that user's thread\n" +
         "• `/whatsapp1 setchannel` — set this channel as the bridge channel for your workspace"
     );
 });
