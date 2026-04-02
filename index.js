@@ -516,7 +516,6 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
         "• `/whatsapp1 <number>` — onboard a new WhatsApp user\n" +
         "• `/whatsapp1 list` — show all connected users\n" +
         "• `/whatsapp1 remove <number>` — disconnect a user\n" +
-        "• `/whatsapp1 reply <message>` — reply from a thread\n" +
         "• `/whatsapp1 ping <number>` — nudge a WhatsApp user to start conversation\n" +
         "• `/whatsapp1 audit <number>` — view full audit history for a number\n" +
         "• `/whatsapp1 open <number>` — jump to that user's thread\n" +
