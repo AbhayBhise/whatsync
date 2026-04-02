@@ -1003,9 +1003,9 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 (async () => {
     await receiver.app.listen(3000);
     console.log("⚡ Slack Bolt running on port 3000");
-    
+
     const expressApp = receiver.app;
-   
+
 
     // Attach ONLY your routes (not whole app)
     expressApp.get("/", (req, res) => {
@@ -1771,6 +1771,59 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
                 console.log("✅ JOIN verified with token:", receivedToken, "for:", maskPhone(from));
 
+                // Check if number already connected to a DIFFERENT workspace
+                const existingConsent = await prisma.consent.findUnique({
+                    where: { phoneNumber: hashPhone(from) }
+                });
+
+                if (existingConsent && existingConsent.teamId !== pending.teamId) {
+                    const oldTeamId = existingConsent.teamId;
+
+                    // Get old workspace mapping for thread notification
+                    const oldMapping = await prisma.mapping.findFirst({
+                        where: { phoneNumber: hashPhone(from), teamId: oldTeamId }
+                    });
+
+                    // Notify old workspace
+                    try {
+                        const oldWorkspace = await prisma.workspaceInstall.findUnique({ where: { teamId: oldTeamId } });
+                        const oldBotToken = oldWorkspace?.botToken || process.env.SLACK_BOT_TOKEN;
+                        const oldChannel = oldWorkspace?.channelId || process.env.SLACK_CHANNEL_ID;
+                        const { WebClient: OldClient } = require("@slack/web-api");
+                        const oldSlack = new OldClient(oldBotToken);
+                        await oldSlack.chat.postMessage({
+                            channel: oldChannel,
+                            thread_ts: oldMapping?.threadTs,
+                            text: `⚠️ *${from} has switched to another workspace.* They joined a different Slack team and have been automatically disconnected from this workspace. All their data has been deleted.`
+                        });
+                    } catch (err) {
+                        console.error("❌ Old workspace notification failed:", err.message);
+                    }
+
+                    // Notify WA user of workspace switch
+                    try {
+                        await axios.post(
+                            `https://graph.facebook.com/v22.0/${process.env.PHONE_NUMBER_ID}/messages`,
+                            {
+                                messaging_product: "whatsapp",
+                                to: from,
+                                type: "text",
+                                text: {
+                                    body: `🔄 You have been moved to a new Slack workspace.\n\nYour previous connection has been automatically removed. You are now connected to the new team.`
+                                }
+                            },
+                            { headers: { Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`, "Content-Type": "application/json" } }
+                        );
+                    } catch (err) {
+                        console.error("❌ WA workspace switch notification failed:", err.message);
+                    }
+
+                    // Delete old workspace data
+                    await prisma.mapping.deleteMany({ where: { phoneNumber: hashPhone(from), teamId: oldTeamId } });
+                    await auditLog(hashPhone(from), "WORKSPACE_SWITCHED", "whatsapp_user", oldTeamId);
+                    console.log("🔄 Workspace switch detected for:", maskPhone(from), "from:", oldTeamId, "to:", pending.teamId);
+                }
+
                 await prisma.consent.upsert({
                     where: { phoneNumber: hashPhone(from) },
                     update: { consentGiven: true, teamId: pending.teamId },
@@ -1878,7 +1931,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
             res.sendStatus(200);
 
-        // AFTER
+            // AFTER
         } catch (err) {
             Sentry.captureException(err);
             console.error("Webhook error:", err.message);
