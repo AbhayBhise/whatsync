@@ -149,5 +149,5 @@ Each workspace operates in complete isolation with its own bot token, channel bi
 
 ---
 
-> *Built for Neobim Hackathon 2026 — Team Whatsync*  
+> *Built for Neobim Hackathon 2026 — Team Whatsync A*  
 > 🌐 https://whatsyncr.onrender.com
