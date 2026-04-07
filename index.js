@@ -385,7 +385,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
     // ===============================
     // OPEN: /whatsapp1 open <number>
     // ===============================
-    if (subcommand === "open") {
+if (subcommand === "open") {
     const number = parts[1];
 
     if (!number || !/^\d{10,15}$/.test(number)) {
@@ -409,25 +409,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
 
     return respond({
         response_type: "ephemeral",
-        blocks: [
-            {
-                type: "section",
-                text: {
-                    type: "mrkdwn",
-                    text: `🧵 Thread found for *${number}*`
-                },
-                accessory: {
-                    type: "button",
-                    text: {
-                        type: "plain_text",
-                        text: "👉 Jump to Thread",
-                        emoji: true
-                    },
-                    url: `https://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`,
-                    action_id: "open_thread"
-                }
-            }
-        ]
+        text: `🧵 Jump to ${number}'s thread:\nhttps://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`
     });
 }
     // ===============================
