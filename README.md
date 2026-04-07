@@ -102,7 +102,7 @@ No third-party apps. No manual forwarding. No missed messages.
 /whatsapp1 <number>         Onboard a new WhatsApp user
 /whatsapp1 list             View all connected users
 /whatsapp1 remove <number>  Disconnect + GDPR full erasure
-/whatsapp1 ping <number>    Re-initiate expired session
+/whatsapp1 ping <number>    Nudge the user from slack to whatsapp to reply and notify about the 24hr open window
 /whatsapp1 audit <number>   View full GDPR event history
 /whatsapp1 setchannel       Set bridge channel for this workspace
 /whatsapp1 reply <message>  Reply via slash command
