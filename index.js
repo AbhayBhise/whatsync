@@ -406,10 +406,19 @@ if (subcommand === "open") {
 
     const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
     const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+    const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+
+    const { WebClient } = require("@slack/web-api");
+    const slackClient = new WebClient(botToken);
+
+    const permalinkRes = await slackClient.chat.getPermalink({
+        channel: channelId,
+        message_ts: mapping.threadTs
+    });
 
     return respond({
         response_type: "ephemeral",
-        text: `🧵 Jump to ${number}'s thread:\nhttps://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`
+        text: `🧵 Jump to ${number}'s thread:\n${permalinkRes.permalink}`
     });
 }
     // ===============================
