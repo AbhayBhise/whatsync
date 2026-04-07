@@ -443,7 +443,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
                     to: number,
                     type: "text",
                     text: {
-                        body: `👋 The team on Slack wants to chat with you!\n\nPlease reply to this message to start the conversation. The session lasts 24 hours from your last message.`
+                        body: `👋 Hi! The Slack team is trying to reach you.\n\nPlease reply with anything to continue the conversation. If you don't respond, the session will expire after 24 hours of inactivity.`
                     }
                 },
                 {
