@@ -385,42 +385,42 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
     // ===============================
     // OPEN: /whatsapp1 open <number>
     // ===============================
-if (subcommand === "open") {
-    const number = parts[1];
+    if (subcommand === "open") {
+        const number = parts[1];
 
-    if (!number || !/^\d{10,15}$/.test(number)) {
-        return respond("Usage: /whatsapp1 open 91XXXXXXXXXX");
-    }
+        if (!number || !/^\d{10,15}$/.test(number)) {
+            return respond("Usage: /whatsapp1 open 91XXXXXXXXXX");
+        }
 
-    const teamId = command.team_id;
-    const mapping = await prisma.mapping.findFirst({
-        where: { phoneNumber: hashPhone(number), teamId }
-    });
+        const teamId = command.team_id;
+        const mapping = await prisma.mapping.findFirst({
+            where: { phoneNumber: hashPhone(number), teamId }
+        });
 
-    if (!mapping) {
+        if (!mapping) {
+            return respond({
+                response_type: "ephemeral",
+                text: `⚠️ No thread found for ${number}. They may not have joined yet.`
+            });
+        }
+
+        const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+        const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+        const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
+
+        const { WebClient } = require("@slack/web-api");
+        const slackClient = new WebClient(botToken);
+
+        const permalinkRes = await slackClient.chat.getPermalink({
+            channel: channelId,
+            message_ts: mapping.threadTs
+        });
+
         return respond({
             response_type: "ephemeral",
-            text: `⚠️ No thread found for ${number}. They may not have joined yet.`
+            text: `🧵 Jump to ${number}'s thread:\n${permalinkRes.permalink}`
         });
     }
-
-    const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
-    const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
-    const botToken = workspaceInstall?.botToken || process.env.SLACK_BOT_TOKEN;
-
-    const { WebClient } = require("@slack/web-api");
-    const slackClient = new WebClient(botToken);
-
-    const permalinkRes = await slackClient.chat.getPermalink({
-        channel: channelId,
-        message_ts: mapping.threadTs
-    });
-
-    return respond({
-        response_type: "ephemeral",
-        text: `🧵 Jump to ${number}'s thread:\n${permalinkRes.permalink}`
-    });
-}
     // ===============================
     // PING: /whatsapp1 ping <number>
     // ===============================
@@ -1011,7 +1011,15 @@ async function sendWhatsAppMessage(to, message, slackClient = null, threadTs = n
 (async () => {
     await receiver.app.listen(3000);
     console.log("⚡ Slack Bolt running on port 3000");
-
+    // Keep Render alive — ping self every 14 minutes
+    setInterval(async () => {
+        try {
+            await axios.get(`${process.env.APP_URL}/`);
+            console.log("🏓 Self-ping sent to keep server alive");
+        } catch (err) {
+            console.error("❌ Self-ping failed:", err.message);
+        }
+    }, 14 * 60 * 1000);
     const expressApp = receiver.app;
 
 
