@@ -386,32 +386,50 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
     // OPEN: /whatsapp1 open <number>
     // ===============================
     if (subcommand === "open") {
-        const number = parts[1];
+    const number = parts[1];
 
-        if (!number || !/^\d{10,15}$/.test(number)) {
-            return respond("Usage: /whatsapp1 open 91XXXXXXXXXX");
-        }
+    if (!number || !/^\d{10,15}$/.test(number)) {
+        return respond("Usage: /whatsapp1 open 91XXXXXXXXXX");
+    }
 
-        const teamId = command.team_id;
-        const mapping = await prisma.mapping.findFirst({
-            where: { phoneNumber: hashPhone(number), teamId }
-        });
+    const teamId = command.team_id;
+    const mapping = await prisma.mapping.findFirst({
+        where: { phoneNumber: hashPhone(number), teamId }
+    });
 
-        if (!mapping) {
-            return respond({
-                response_type: "ephemeral",
-                text: `⚠️ No thread found for ${number}. They may not have joined yet.`
-            });
-        }
-
-        const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
-        const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
-
+    if (!mapping) {
         return respond({
             response_type: "ephemeral",
-            text: `🧵 Jump to ${number}'s thread:\nhttps://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`
+            text: `⚠️ No thread found for ${number}. They may not have joined yet.`
         });
     }
+
+    const workspaceInstall = await prisma.workspaceInstall.findUnique({ where: { teamId } });
+    const channelId = workspaceInstall?.channelId || process.env.SLACK_CHANNEL_ID;
+
+    return respond({
+        response_type: "ephemeral",
+        blocks: [
+            {
+                type: "section",
+                text: {
+                    type: "mrkdwn",
+                    text: `🧵 Thread found for *${number}*`
+                },
+                accessory: {
+                    type: "button",
+                    text: {
+                        type: "plain_text",
+                        text: "👉 Jump to Thread",
+                        emoji: true
+                    },
+                    url: `slack://channel?team=${teamId}&id=${mapping.threadTs}`,
+                    action_id: "open_thread"
+                }
+            }
+        ]
+    });
+}
     // ===============================
     // PING: /whatsapp1 ping <number>
     // ===============================
