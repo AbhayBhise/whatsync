@@ -423,7 +423,7 @@ slackApp.command("/whatsapp1", async ({ command, ack, respond }) => {
                         text: "👉 Jump to Thread",
                         emoji: true
                     },
-                    url: `slack://channel?team=${teamId}&id=${mapping.threadTs}`,
+                    url: `https://slack.com/app_redirect?channel=${channelId}&message_ts=${mapping.threadTs}`,
                     action_id: "open_thread"
                 }
             }
